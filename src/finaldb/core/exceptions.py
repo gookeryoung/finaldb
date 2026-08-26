@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "CleanError",
     "FinaldbError",
     "InvalidDataError",
     "TableExistsError",
@@ -13,6 +14,10 @@ __all__ = [
 
 class FinaldbError(Exception):
     """finaldb 所有业务异常的公共基类。."""
+
+
+class CleanError(FinaldbError):
+    """数据整理相关错误（规则校验失败、源表不存在等）。"""
 
 
 class WorkspaceError(FinaldbError):

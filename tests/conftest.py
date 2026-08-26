@@ -37,9 +37,10 @@ def qml_engine(qapp: QGuiApplication) -> Iterator[tuple[Any, ...]]:
     控制器使用临时工作区根目录，避免污染用户主目录。
 
     Yields:
-        (QML 引擎, 主题控制器, 主窗口根对象, 工作区控制器, 预览控制器)
+        (QML 引擎, 主题控制器, 主窗口根对象, 工作区控制器, 预览控制器, 清洗控制器)
     """
     from finaldb.app import apply_global_font, create_engine, register_qml_types
+    from finaldb.gui.controllers.clean_controller import CleanController
     from finaldb.gui.controllers.preview_controller import PreviewController
     from finaldb.gui.controllers.workspace_controller import WorkspaceController
     from finaldb.gui.theme import ThemeController
@@ -50,10 +51,11 @@ def qml_engine(qapp: QGuiApplication) -> Iterator[tuple[Any, ...]]:
     with tempfile.TemporaryDirectory() as tmp:
         workspace_ctrl = WorkspaceController(root=Path(tmp))
         preview_ctrl = PreviewController()
-        engine = create_engine(theme, (workspace_ctrl, preview_ctrl))
+        clean_ctrl = CleanController()
+        engine = create_engine(theme, (workspace_ctrl, preview_ctrl, clean_ctrl))
         assert engine.rootObjects(), "Main.qml 加载失败"
         root = engine.rootObjects()[0]
-        yield engine, theme, root, workspace_ctrl, preview_ctrl
+        yield engine, theme, root, workspace_ctrl, preview_ctrl, clean_ctrl
         engine.deleteLater()
         qapp.processEvents()
 
