@@ -1,0 +1,31 @@
+"""core 层统一异常体系：公共基类 + 按场景分类。."""
+
+from __future__ import annotations
+
+__all__ = [
+    "FinaldbError",
+    "WorkspaceError",
+    "TableExistsError",
+    "UnsupportedFormatError",
+    "InvalidDataError",
+]
+
+
+class FinaldbError(Exception):
+    """finaldb 所有业务异常的公共基类。."""
+
+
+class WorkspaceError(FinaldbError):
+    """工作区生命周期相关错误（创建/打开/校验失败）。"""
+
+
+class TableExistsError(FinaldbError):
+    """目标表已存在（导入/合并的目标表名冲突）。"""
+
+
+class UnsupportedFormatError(FinaldbError):
+    """文件格式不受支持（无法识别的扩展名或损坏的文件）。"""
+
+
+class InvalidDataError(FinaldbError):
+    """数据内容不合法（空文件、结构不一致等）。"""
