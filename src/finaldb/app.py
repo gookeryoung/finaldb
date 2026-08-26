@@ -13,6 +13,7 @@ from PySide2.QtGui import QFont, QGuiApplication
 from PySide2.QtQml import QQmlApplicationEngine, qmlRegisterType
 
 from finaldb.gui.controllers.clean_controller import CleanController
+from finaldb.gui.controllers.history_controller import HistoryController
 from finaldb.gui.controllers.merge_controller import MergeController
 from finaldb.gui.controllers.preview_controller import PreviewController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
@@ -20,13 +21,14 @@ from finaldb.gui.theme import ThemeController, detect_font_families
 
 __all__ = ["Controllers", "apply_global_font", "create_app", "create_controllers", "create_engine", "main"]
 
-# 控制器装配表：key -> context property 名（P5/P6 新页面在此追加即可）
+# 控制器装配表：key -> context property 名（P6 新页面在此追加即可）
 Controllers = dict[str, QObject]
 _CONTEXT_NAMES = {
     "workspace": "WorkspaceCtrl",
     "preview": "PreviewCtrl",
     "clean": "CleanCtrl",
     "merge": "MergeCtrl",
+    "history": "HistoryCtrl",
 }
 
 _MAIN_QML = Path(__file__).parent / "gui" / "views" / "Main.qml"
@@ -68,6 +70,7 @@ def create_controllers() -> Controllers:
         "preview": PreviewController(),
         "clean": CleanController(),
         "merge": MergeController(),
+        "history": HistoryController(),
     }
 
 

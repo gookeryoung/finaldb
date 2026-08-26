@@ -9,6 +9,7 @@ __all__ = [
     "MergeError",
     "TableExistsError",
     "UnsupportedFormatError",
+    "VersionError",
     "WorkspaceError",
 ]
 
@@ -39,3 +40,7 @@ class UnsupportedFormatError(FinaldbError):
 
 class InvalidDataError(FinaldbError):
     """数据内容不合法（空文件、结构不一致等）。"""
+
+
+class VersionError(FinaldbError):
+    """版本控制相关错误（快照不存在、引用无法解析等）。"""

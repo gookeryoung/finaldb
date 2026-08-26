@@ -37,10 +37,12 @@ def qml_engine(qapp: QGuiApplication) -> Iterator[tuple[Any, ...]]:
     控制器使用临时工作区根目录，避免污染用户主目录。
 
     Yields:
-        (QML 引擎, 主题控制器, 主窗口根对象, 工作区控制器, 预览控制器, 清洗控制器, 合并控制器)
+        (QML 引擎, 主题控制器, 主窗口根对象, 工作区控制器, 预览控制器,
+         清洗控制器, 合并控制器, 历史控制器)
     """
     from finaldb.app import apply_global_font, create_engine, register_qml_types
     from finaldb.gui.controllers.clean_controller import CleanController
+    from finaldb.gui.controllers.history_controller import HistoryController
     from finaldb.gui.controllers.merge_controller import MergeController
     from finaldb.gui.controllers.preview_controller import PreviewController
     from finaldb.gui.controllers.workspace_controller import WorkspaceController
@@ -54,16 +56,18 @@ def qml_engine(qapp: QGuiApplication) -> Iterator[tuple[Any, ...]]:
         preview_ctrl = PreviewController()
         clean_ctrl = CleanController()
         merge_ctrl = MergeController()
+        history_ctrl = HistoryController()
         controllers = {
             "workspace": workspace_ctrl,
             "preview": preview_ctrl,
             "clean": clean_ctrl,
             "merge": merge_ctrl,
+            "history": history_ctrl,
         }
         engine = create_engine(theme, controllers)
         assert engine.rootObjects(), "Main.qml 加载失败"
         root = engine.rootObjects()[0]
-        yield engine, theme, root, workspace_ctrl, preview_ctrl, clean_ctrl, merge_ctrl
+        yield engine, theme, root, workspace_ctrl, preview_ctrl, clean_ctrl, merge_ctrl, history_ctrl
         engine.deleteLater()
         qapp.processEvents()
 

@@ -10,9 +10,10 @@ from pathlib import Path
 
 from PySide2.QtCore import QObject, Signal, Slot
 
-from finaldb.core.exceptions import FinaldbError
+from finaldb.core.exceptions import FinaldbError, VersionError
 from finaldb.core.importers.service import import_into_workspace
 from finaldb.core.storage.database import connect
+from finaldb.core.versioning import commit_snapshot, has_changes
 
 __all__ = ["ImportWorker"]
 
@@ -51,5 +52,16 @@ class ImportWorker(QObject):
         if not results:
             self.finished.emit(_EMPTY_SUMMARY)  # pyrefly: ignore [missing-attribute]
             return
+        # 导入成功后自动打快照（无变化时静默跳过，快照失败不阻断导入结果）
+        self._auto_snapshot()
         summary = "、".join(f"{r.table}({r.rows} 行)" for r in results)
         self.finished.emit(f"已导入 {summary}")  # pyrefly: ignore [missing-attribute]
+
+    def _auto_snapshot(self) -> None:
+        """导入后自动提交快照（尽力而为，失败静默）。."""
+        ws_path = Path(self._db_path).parent
+        try:
+            if has_changes(ws_path):
+                commit_snapshot(ws_path, f"导入 {Path(self._file_path).name}")
+        except (OSError, VersionError):
+            pass

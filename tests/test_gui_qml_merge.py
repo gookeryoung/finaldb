@@ -13,13 +13,13 @@ from tests.conftest import find_sidebar, qml_set_prop
 
 pytestmark = pytest.mark.gui
 
-# qml_engine fixture 元组：(引擎, 主题, 根窗口, 工作区控制器, 预览控制器, 清洗控制器, 合并控制器)
-QmlFixture = tuple[Any, Any, Any, Any, Any, Any, Any]
+# qml_engine fixture 元组：(引擎, 主题, 根窗口, 工作区/预览/清洗/合并/历史控制器)
+QmlFixture = tuple[Any, Any, Any, Any, Any, Any, Any, Any]
 
 
 def test_mergepage_loads(qml_engine: QmlFixture) -> None:
     """切换到合并去重页后 MergePage 成功创建且默认纵向合并模式。"""
-    _engine, _theme, root, _ws, _pv, _cl, _mg = qml_engine
+    _engine, _theme, root, *_rest = qml_engine
     sidebar = find_sidebar(root)
     qml_set_prop(sidebar, "currentPage", "merge")
     QGuiApplication.processEvents()
@@ -31,7 +31,7 @@ def test_mergepage_loads(qml_engine: QmlFixture) -> None:
 
 def test_mergepage_binding_and_apply(qml_engine: QmlFixture, tmp_path: Path) -> None:
     """工作区建表后 MergePage 联动：表加载 → 键列加载 → 同步合并。."""
-    _engine, _theme, root, ws, _pv, _cl, mg = qml_engine
+    _engine, _theme, root, ws, _pv, _cl, mg, *_rest = qml_engine
     # 准备工作区与数据
     ws.create_workspace("merge-bind")
     csv = tmp_path / "d.csv"
