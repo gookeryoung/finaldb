@@ -98,3 +98,25 @@ def test_csv_header_only_yields_no_rows(tmp_path: Path) -> None:
     f = _write(tmp_path / "d.csv", "a,b\n")
     td = read_csv(f)
     assert list(td.rows) == []
+
+
+def test_csv_undecodable_bytes_raises(tmp_path: Path) -> None:
+    """utf-8 与 gbk 均无法解码的字节报编码不可识别。."""
+    f = tmp_path / "bad.csv"
+    f.write_bytes(b"\xff\xff\xfd")
+    with pytest.raises(InvalidDataError, match="无法识别文件编码"):
+        read_csv(f)
+
+
+def test_csv_blank_header_no_data_raises(tmp_path: Path) -> None:
+    """仅一个空行（无表头无数据）报文件为空。."""
+    f = _write(tmp_path / "blank.csv", "\n")
+    with pytest.raises(InvalidDataError, match="为空"):
+        read_csv(f)
+
+
+def test_csv_blank_cell_becomes_none(tmp_path: Path) -> None:
+    """空白单元格解析为 None。."""
+    f = _write(tmp_path / "d.csv", "a,b\n ,1\n")
+    td = read_csv(f)
+    assert list(td.rows) == [(None, 1)]

@@ -10,8 +10,8 @@ from finaldb.core.importers.naming import sanitize_identifier
 from finaldb.core.importers.service import ImportResult, import_file, import_into_workspace
 
 __all__ = [
-    "TableData",
     "ImportResult",
+    "TableData",
     "import_file",
     "import_into_workspace",
     "read_csv",

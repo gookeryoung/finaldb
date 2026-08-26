@@ -12,6 +12,8 @@ from PySide2.QtCore import QObject, QUrl
 from PySide2.QtGui import QFont, QGuiApplication
 from PySide2.QtQml import QQmlApplicationEngine, qmlRegisterType
 
+from finaldb.gui.controllers.preview_controller import PreviewController
+from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import ThemeController, detect_font_families
 
 __all__ = ["apply_global_font", "create_app", "create_engine", "main"]
@@ -44,27 +46,50 @@ def register_qml_types() -> None:
     register_qml_types.done = True  # type: ignore[attr-defined]
 
 
-def create_engine(theme: ThemeController, parent: QObject | None = None) -> QQmlApplicationEngine:
+def create_controllers() -> tuple[WorkspaceController, PreviewController]:
+    """构造页面控制器（以 context property 暴露给 QML）。
+
+    Returns:
+        (工作区控制器, 表预览控制器) 二元组
+    """
+    return WorkspaceController(), PreviewController()
+
+
+def create_engine(
+    theme: ThemeController,
+    controllers: tuple[WorkspaceController, PreviewController] | None = None,
+    parent: QObject | None = None,
+) -> QQmlApplicationEngine:
     """构造 QML 引擎并加载主窗口。
 
     Args:
         theme: 主题控制器单例，以 context property ``Theme`` 暴露给 QML
+        controllers: 页面控制器二元组（None 时新建）
         parent: 引擎父对象
 
     Returns:
         已加载 ``Main.qml`` 的引擎（加载失败时 rootObjects 为空）
     """
+    if controllers is None:
+        controllers = create_controllers()
+    workspace_ctrl, preview_ctrl = controllers
     engine = QQmlApplicationEngine(parent)
-    engine.rootContext().setContextProperty("Theme", theme)  # pyrefly: ignore [missing-argument]
+    ctx = engine.rootContext()
+    ctx.setContextProperty("Theme", theme)  # pyrefly: ignore [missing-argument]
+    ctx.setContextProperty("WorkspaceCtrl", workspace_ctrl)  # pyrefly: ignore [missing-argument]
+    ctx.setContextProperty("PreviewCtrl", preview_ctrl)  # pyrefly: ignore [missing-argument]
     engine.load(QUrl.fromLocalFile(str(_MAIN_QML)))  # pyrefly: ignore [missing-argument]
     return engine
 
 
-def create_app(argv: list[str]) -> tuple[QGuiApplication, QQmlApplicationEngine, ThemeController]:
+def create_app(
+    argv: list[str], controllers: tuple[WorkspaceController, PreviewController] | None = None
+) -> tuple[QGuiApplication, QQmlApplicationEngine, ThemeController]:
     """构造完整 GUI 应用（可测函数，拆离事件循环）。
 
     Args:
         argv: 命令行参数（透传 QGuiApplication）
+        controllers: 页面控制器二元组（None 时新建）
 
     Returns:
         (应用实例, QML 引擎, 主题控制器) 三元组
@@ -73,7 +98,7 @@ def create_app(argv: list[str]) -> tuple[QGuiApplication, QQmlApplicationEngine,
     apply_global_font(app)
     register_qml_types()
     theme = ThemeController()
-    engine = create_engine(theme)
+    engine = create_engine(theme, controllers)
     return app, engine, theme
 
 

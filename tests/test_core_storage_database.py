@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,7 @@ from finaldb.core.storage.database import (
 
 
 @pytest.fixture()
-def conn(tmp_path: Path) -> sqlite3.Connection:
+def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     """临时数据库连接。."""
     connection = connect(tmp_path / "test.db")
     yield connection

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 __all__ = [
     "FinaldbError",
-    "WorkspaceError",
+    "InvalidDataError",
     "TableExistsError",
     "UnsupportedFormatError",
-    "InvalidDataError",
+    "WorkspaceError",
 ]
 
 

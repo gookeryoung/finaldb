@@ -13,11 +13,11 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import sqlite3
 import time
+from operator import attrgetter
 from pathlib import Path
 from typing import Any
-
-import sqlite3
 
 from finaldb.core.exceptions import WorkspaceError
 from finaldb.core.storage.database import connect, table_infos
@@ -68,7 +68,7 @@ class WorkspaceMeta:
 class Workspace:
     """打开状态的工作区：目录 + 数据库路径 + 便捷访问。."""
 
-    __slots__ = ("_path", "_name")
+    __slots__ = ("_name", "_path")
 
     def __init__(self, path: Path) -> None:
         """打开工作区（校验标记文件存在）。
@@ -167,16 +167,16 @@ class WorkspaceManager:
         """
         return Workspace(path)
 
-    def list(self) -> "list[WorkspaceMeta]":
+    def list(self) -> list[WorkspaceMeta]:
         """列举根目录下全部工作区（按更新时间倒序）。."""
         if not self._root.is_dir():
             return []
-        metas = []
+        metas: list[WorkspaceMeta] = []
         for child in sorted(self._root.iterdir()):
             if child.is_dir() and (child / _MARKER_FILE).is_file():
                 ws = Workspace(child)
                 metas.append(ws.meta())
-        metas.sort(key=lambda m: m.updated_at, reverse=True)
+        metas.sort(key=attrgetter("updated_at"), reverse=True)
         return metas
 
     def delete(self, path: Path) -> None:

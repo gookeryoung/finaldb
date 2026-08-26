@@ -17,6 +17,7 @@ def xlsx_path(tmp_path: Path) -> Path:
     """生成双 sheet 的测试工作簿。."""
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "人员"
     ws.append(["id", "姓名", "入职日期"])
     ws.append([1, "甲", datetime.date(2024, 1, 15)])
@@ -59,7 +60,7 @@ def test_xls_rejected(tmp_path: Path) -> None:
     """旧版 .xls 报不支持。."""
     fake = tmp_path / "old.xls"
     fake.write_bytes(b"fake")
-    with pytest.raises(UnsupportedFormatError, match=".xls"):
+    with pytest.raises(UnsupportedFormatError, match=r"\.xls"):
         list(read_excel(fake))
 
 
@@ -84,6 +85,7 @@ def test_duplicate_headers_deduped(tmp_path: Path) -> None:
     """重复表头自动去重。."""
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "s"
     ws.append(["id", "id"])
     ws.append([1, 2])

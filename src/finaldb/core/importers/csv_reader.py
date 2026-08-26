@@ -35,9 +35,9 @@ def read_csv(path: Path, delimiter: str = ",") -> TableData:
     if not text_lines:
         raise InvalidDataError(f"文件为空: {path.name}")
     reader = csv.reader(iter(text_lines), delimiter=delimiter)
+    # splitlines 非空必有首行，None 分支不可达
     header = next(reader, None)
-    if header is None:
-        raise InvalidDataError(f"文件为空: {path.name}")
+    assert header is not None
     if any(cell.strip() for cell in header):
         columns = _dedupe_columns(header)
     else:
@@ -71,9 +71,7 @@ def _dedupe_columns(header: list[str]) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _chain_row(
-    first: list[str], reader: csv.reader
-) -> Iterator[list[str]]:
+def _chain_row(first: list[str], reader: Iterator[list[str]]) -> Iterator[list[str]]:
     """把已取出的首行重新接回迭代器头部。
 
     :param first: 首行数据
@@ -84,7 +82,7 @@ def _chain_row(
     yield from reader
 
 
-def _rows_of(reader: csv.reader, width: int) -> Iterator[tuple[object, ...]]:
+def _rows_of(reader: Iterator[list[str]], width: int) -> Iterator[tuple[object, ...]]:
     """把 CSV 行转为定宽元组（缺列补 None，多列截断）。
 
     :param reader: CSV reader

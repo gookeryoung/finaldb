@@ -1,0 +1,247 @@
+"""工作区控制器 / 导入 Worker / 预览控制器 / 模型测试。."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+import pytest
+from PySide2.QtCore import Qt
+from PySide2.QtGui import QGuiApplication
+
+from finaldb.gui.controllers.preview_controller import PreviewController
+from finaldb.gui.controllers.workspace_controller import (
+    WorkspaceController,
+    _to_local_path,
+    format_timestamp,
+)
+from finaldb.gui.workers.import_worker import ImportWorker
+
+pytestmark = pytest.mark.gui
+
+
+@pytest.fixture()
+def ctrl(qapp: object, tmp_path: Path) -> WorkspaceController:
+    """临时根目录的工作区控制器。."""
+    return WorkspaceController(root=tmp_path / "ws")
+
+
+def _csv(tmp_path: Path) -> Path:
+    """生成两行 CSV。."""
+    f = tmp_path / "demo.csv"
+    f.write_text("a,b\n1,x\n2,y\n", "utf-8")
+    return f
+
+
+def test_initial_state(ctrl: WorkspaceController) -> None:
+    """初始无工作区、无当前选择、不忙。."""
+    assert ctrl.model.rowCount() == 0
+    assert ctrl.currentWorkspace == ""
+    assert ctrl.currentWorkspacePath == ""
+    assert ctrl.busy is False
+    assert ctrl.tableModel.rowCount() == 0
+
+
+def test_create_workspace_selects_it(ctrl: WorkspaceController) -> None:
+    """创建工作区后自动选中并刷新列表。."""
+    ctrl.create_workspace("alpha")
+    assert ctrl.currentWorkspace == "alpha"
+    assert ctrl.model.rowCount() == 1
+    assert (Path(ctrl.currentWorkspacePath) / "data.db").is_file()
+
+
+def test_create_invalid_name_emits_error(ctrl: WorkspaceController) -> None:
+    """非法名称经 error_raised 报错且不创建。."""
+    errors: list[str] = []
+    ctrl.error_raised.connect(errors.append)  # pyrefly: ignore [missing-attribute]
+    ctrl.create_workspace("中文!!")
+    assert errors and "无效" in errors[0]
+    assert ctrl.model.rowCount() == 0
+
+
+def test_select_and_delete_workspace(ctrl: WorkspaceController) -> None:
+    """选择与删除工作区；删除当前工作区清空选择。."""
+    ctrl.create_workspace("alpha")
+    ctrl.create_workspace("beta")
+    ctrl.select_workspace("alpha")
+    assert ctrl.currentWorkspace == "alpha"
+    ctrl.delete_workspace("alpha")
+    assert ctrl.currentWorkspace == ""
+    assert ctrl.model.rowCount() == 1
+
+
+def test_delete_missing_workspace_emits_error(ctrl: WorkspaceController) -> None:
+    """删除不存在的工作区报错。."""
+    errors: list[str] = []
+    ctrl.error_raised.connect(errors.append)  # pyrefly: ignore [missing-attribute]
+    ctrl.delete_workspace("ghost")
+    assert errors and "不存在" in errors[0]
+
+
+def test_select_missing_workspace_emits_error(ctrl: WorkspaceController) -> None:
+    """选择不存在的工作区报错。."""
+    errors: list[str] = []
+    ctrl.error_raised.connect(errors.append)  # pyrefly: ignore [missing-attribute]
+    ctrl.select_workspace("ghost")
+    assert errors and "不存在" in errors[0]
+
+
+def test_import_file_sync_updates_tables(ctrl: WorkspaceController, tmp_path: Path) -> None:
+    """同步导入后表列表刷新且 import_finished 发信号。."""
+    ctrl.create_workspace("alpha")
+    messages: list[str] = []
+    ctrl.import_finished.connect(messages.append)  # pyrefly: ignore [missing-attribute]
+    ctrl.import_file_sync(str(_csv(tmp_path)))
+    assert messages and "demo(2 行)" in messages[0]
+    assert ctrl.tableModel.rowCount() == 1
+    assert ctrl.tableModel.table_at(0) == "demo"
+
+
+def test_import_without_workspace_emits_error(ctrl: WorkspaceController, tmp_path: Path) -> None:
+    """未选工作区导入报错。."""
+    errors: list[str] = []
+    ctrl.error_raised.connect(errors.append)  # pyrefly: ignore [missing-attribute]
+    ctrl.import_file_sync(str(_csv(tmp_path)))
+    assert errors and "先选择工作区" in errors[0]
+
+
+def test_import_bad_format_emits_failure(ctrl: WorkspaceController, tmp_path: Path) -> None:
+    """不支持的文件格式经 import_failed 报错。."""
+    ctrl.create_workspace("alpha")
+    f = tmp_path / "x.parquet"
+    f.write_bytes(b"junk")
+    failures: list[str] = []
+    ctrl.import_failed.connect(failures.append)  # pyrefly: ignore [missing-attribute]
+    ctrl.import_file_sync(str(f))
+    assert failures and "导入失败" in failures[0]
+
+
+def test_import_file_async_thread(qapp: object, ctrl: WorkspaceController, tmp_path: Path) -> None:
+    """后台线程导入完成后列表刷新且忙状态复位。."""
+    ctrl.create_workspace("alpha")
+    messages: list[str] = []
+    ctrl.import_finished.connect(messages.append)  # pyrefly: ignore [missing-attribute]
+    ctrl.import_file(str(_csv(tmp_path)))
+    assert ctrl.busy is True
+    deadline = time.monotonic() + 10.0
+    while not messages and time.monotonic() < deadline:
+        QGuiApplication.processEvents()
+        time.sleep(0.02)
+    assert messages, "后台导入未在超时前完成"
+    assert "demo(2 行)" in messages[0]
+    # 线程退出后忙状态复位
+    deadline = time.monotonic() + 5.0
+    while ctrl.busy and time.monotonic() < deadline:
+        QGuiApplication.processEvents()
+        time.sleep(0.02)
+    assert ctrl.busy is False
+    assert ctrl.tableModel.rowCount() == 1
+
+
+def test_import_async_without_workspace(qapp: object, ctrl: WorkspaceController) -> None:
+    """无工作区时后台导入入口同样报错。."""
+    errors: list[str] = []
+    ctrl.error_raised.connect(errors.append)  # pyrefly: ignore [missing-attribute]
+    ctrl.import_file("whatever.csv")
+    assert errors and "先选择工作区" in errors[0]
+
+
+def test_to_local_path_variants() -> None:
+    """file:/// URL 与普通路径的本地路径解析。."""
+    assert _to_local_path("file:///C:/data/a.csv") == "C:/data/a.csv"
+    assert _to_local_path("file://") == ""
+    assert _to_local_path("") == ""
+    assert _to_local_path("  ") == ""
+    assert _to_local_path("/tmp/x.csv") == "/tmp/x.csv"
+
+
+def test_format_timestamp() -> None:
+    """时间戳格式化：无效值显示占位符。."""
+    assert format_timestamp(0) == "—"
+    assert len(format_timestamp(1700000000)) == 16
+
+
+def test_import_worker_success_and_failure(tmp_path: Path) -> None:
+    """Worker 直接调用：成功发 finished，失败发 failed。."""
+    ws_db = tmp_path / "data.db"
+    import sqlite3
+
+    conn = sqlite3.connect(str(ws_db))
+    conn.close()
+    ok: list[str] = []
+    bad: list[str] = []
+    w_ok = ImportWorker(str(ws_db), str(_csv(tmp_path)))
+    w_ok.finished.connect(ok.append)  # pyrefly: ignore [missing-attribute]
+    w_ok.failed.connect(bad.append)  # pyrefly: ignore [missing-attribute]
+    w_ok.run()
+    assert ok and bad == []
+    conn = sqlite3.connect(str(ws_db))
+    cur = conn.execute("SELECT COUNT(*) FROM demo")
+    assert cur.fetchone()[0] == 2
+    conn.close()
+    # 失败路径：不支持格式
+    junk = tmp_path / "x.parquet"
+    junk.write_bytes(b"j")
+    w_bad = ImportWorker(str(ws_db), str(junk))
+    w_bad.finished.connect(ok.append)  # pyrefly: ignore [missing-attribute]
+    w_bad.failed.connect(bad.append)  # pyrefly: ignore [missing-attribute]
+    w_bad.run()
+    assert bad and "导入失败" in bad[0]
+
+
+def test_preview_controller_load_and_clear(ctrl: WorkspaceController, tmp_path: Path) -> None:
+    """预览控制器加载表前 200 行并支持清空。."""
+    ctrl.create_workspace("alpha")
+    ctrl.import_file_sync(str(_csv(tmp_path)))
+    preview = PreviewController()
+    preview.load_table(ctrl.currentWorkspacePath, "demo")
+    assert preview.tableName == "demo"
+    assert preview.model.rowCount() == 2
+    assert preview.model.columnCount() == 2
+    idx = preview.model.index(0, 1)
+    assert preview.model.data(idx, Qt.DisplayRole) == "x"
+    assert preview.model.headerData(0, Qt.Horizontal, Qt.DisplayRole) == "a"
+    preview.clear()
+    assert preview.tableName == ""
+    assert preview.model.rowCount() == 0
+
+
+def test_workspace_model_data_roles(ctrl: WorkspaceController) -> None:
+    """WorkspaceListModel 角色数据与边界行为。."""
+    ctrl.create_workspace("alpha")
+    from finaldb.core.workspace import WorkspaceMeta
+
+    metas = [WorkspaceMeta("beta", Path("/tmp/beta"), 3, 30, 1700000000.0)]
+    ctrl.model.reload(metas)
+    assert ctrl.model.rowCount() == 1
+    idx = ctrl.model.index(0, 0)
+    assert ctrl.model.data(idx, Qt.UserRole + 1) == "beta"
+    assert ctrl.model.data(idx, Qt.UserRole + 2) == 3
+    assert ctrl.model.data(idx, Qt.UserRole + 3) == 30
+    assert ctrl.model.data(idx, Qt.UserRole + 4) == format_timestamp(1700000000.0)
+    assert ctrl.model.data(idx, Qt.UserRole + 5) == str(Path("/tmp/beta"))
+    # 越界与无效角色返回 None
+    assert ctrl.model.data(ctrl.model.index(5, 0), Qt.UserRole + 1) is None
+    assert ctrl.model.data(idx, Qt.DisplayRole) is None
+    assert ctrl.model.meta_at(0) is metas[0]
+    assert ctrl.model.meta_at(9) is None
+    ctrl.model.clear()
+    assert ctrl.model.rowCount() == 0
+
+
+def test_table_preview_model_edges(qapp: object) -> None:
+    """TablePreviewModel 边界：空模型、无效索引、非显示角色。."""
+    from finaldb.gui.models.table_model import TableListModel, TablePreviewModel
+
+    m = TablePreviewModel()
+    assert m.rowCount() == 0 and m.columnCount() == 0
+    assert m.data(m.index(0, 0), Qt.DisplayRole) is None
+    assert m.headerData(0, Qt.Horizontal, Qt.DisplayRole) is None
+    m.reset_data(["x"], [(1,)])
+    assert m.data(m.index(0, 0), Qt.EditRole) is None  # 非 DisplayRole
+    tl = TableListModel()
+    assert tl.table_at(0) is None
+    assert tl.data(tl.index(0, 0), Qt.UserRole + 1) is None
+    tl.reload([("t", 5)])
+    assert tl.data(tl.index(0, 0), Qt.UserRole + 2) == 5
+    assert tl.data(tl.index(0, 0), Qt.UserRole + 9) is None

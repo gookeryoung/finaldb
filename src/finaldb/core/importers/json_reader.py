@@ -42,9 +42,7 @@ def read_json(path: Path) -> Iterator[TableData]:
         for key, records in data.items():
             yield _records_to_table(sanitize_identifier(f"{path.stem}_{key}"), records)
         return
-    raise InvalidDataError(
-        f"不支持的 JSON 结构（须为对象数组、行数组或多表字典）: {path.name}"
-    )
+    raise InvalidDataError(f"不支持的 JSON 结构（须为对象数组、行数组或多表字典）: {path.name}")
 
 
 def _read_ndjson(path: Path) -> list[dict[str, Any]]:

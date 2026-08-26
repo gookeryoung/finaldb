@@ -58,7 +58,7 @@ def read_excel(path: Path) -> Iterator[TableData]:
 
 def _sheet_to_table(table: str, ws: object) -> TableData:
     """把单个 sheet 转为 TableData（首行表头）。."""
-    row_iter = iter(ws.iter_rows(values_only=True))
+    row_iter = iter(ws.iter_rows(values_only=True))  # pyrefly: ignore [missing-attribute]
     header = next(row_iter, None)
     if header is None:
         raise InvalidDataError(f"工作表无数据: {table}")
@@ -71,8 +71,6 @@ def _sheet_to_table(table: str, ws: object) -> TableData:
     def rows() -> Iterator[tuple[object, ...]]:
         """惰性行迭代器：规范化单元格 + 定宽。."""
         for raw in _chain(first_row, row_iter):
-            if raw is None:
-                continue
             vals = [_normalize_cell(c) for c in raw[:width]]
             while len(vals) < width:
                 vals.append(None)
@@ -86,9 +84,9 @@ def _sheet_to_table(table: str, ws: object) -> TableData:
 
 
 def _chain(
-    first: tuple | None,
-    rest: Iterator[tuple],
-) -> Iterator[tuple]:
+    first: tuple[object, ...] | None,
+    rest: Iterator[tuple[object, ...]],
+) -> Iterator[tuple[object, ...]]:
     """首行接回迭代器头部。."""
     if first is not None:
         yield first
@@ -126,8 +124,5 @@ def _normalize_cell(value: object) -> object:
     if isinstance(value, decimal.Decimal):
         return float(value)
     if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        return text
+        return value.strip() or None
     return value

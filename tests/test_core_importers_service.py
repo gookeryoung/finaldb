@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,7 @@ from finaldb.core.storage.database import table_names
 
 
 @pytest.fixture()
-def conn(tmp_path: Path) -> sqlite3.Connection:
+def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     """临时数据库连接。."""
     c = sqlite3.connect(str(tmp_path / "ws.db"))
     yield c
@@ -84,8 +85,10 @@ def test_import_multi_sheet_excel(conn: sqlite3.Connection, tmp_path: Path) -> N
     from openpyxl import Workbook
 
     wb = Workbook()
-    wb.active.append(["x"])
-    wb.active.append([1])
+    ws1 = wb.active
+    assert ws1 is not None
+    ws1.append(["x"])
+    ws1.append([1])
     ws2 = wb.create_sheet("two")
     ws2.append(["y"])
     ws2.append([2])

@@ -16,28 +16,28 @@ from finaldb.core.exceptions import TableExistsError
 __all__ = [
     "ColumnInfo",
     "TableInfo",
+    "column_infos",
     "connect",
-    "validate_identifier",
-    "quote_identifier",
-    "infer_sql_type",
-    "validate_type",
     "create_table",
-    "insert_rows",
     "drop_table",
+    "fetch_preview",
+    "find_free_table_name",
+    "infer_sql_type",
+    "insert_rows",
+    "quote_identifier",
+    "row_count_of",
     "table_exists",
     "table_infos",
     "table_names",
-    "column_infos",
-    "row_count_of",
-    "find_free_table_name",
-    "fetch_preview",
+    "validate_identifier",
+    "validate_type",
 ]
 
 # 批量插入的 executemany 分片大小：兼顾内存与事务效率
 _BATCH_SIZE = 1000
 
-# 标识符白名单：字母/下划线开头，仅含字母数字下划线
-_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# 标识符黑名单：禁止引号/空白/控制字符（Unicode 字母数字允许，如中文表名）
+_IDENTIFIER_ANY_FORBIDDEN_RE = re.compile(r"[\"'\s\x00-\x1f\x7f]")
 
 
 class ColumnInfo:
@@ -59,18 +59,22 @@ class ColumnInfo:
         return f"ColumnInfo(name={self.name!r}, sql_type={self.sql_type!r})"
 
     def __eq__(self, other: object) -> bool:
-        """按 name 与 sql_type 判等。."""
+        """按 name 与 sql_type 判等。"""
         if not isinstance(other, ColumnInfo):
             return NotImplemented
         return self.name == other.name and self.sql_type == other.sql_type
+
+    def __hash__(self) -> int:
+        """与 __eq__ 一致的哈希（name + sql_type）。"""
+        return hash((self.name, self.sql_type))
 
 
 class TableInfo:
     """表的完整元数据（名称 + 列 + 行数）。."""
 
-    __slots__ = ("name", "columns", "row_count")
+    __slots__ = ("columns", "name", "row_count")
 
-    def __init__(self, name: str, columns: "list[ColumnInfo]", row_count: int) -> None:
+    def __init__(self, name: str, columns: list[ColumnInfo], row_count: int) -> None:
         """初始化表元数据。
 
         :param name: 表名
@@ -100,10 +104,12 @@ def connect(db_path: Path) -> sqlite3.Connection:
 def validate_identifier(name: str) -> str:
     """校验表名/列名合法性，不合法即抛 :class:`ValueError`。
 
+    允许 Unicode 字母数字（含中文）；禁止引号、空白与控制字符。
+
     :param name: 待校验标识符
     :return: 原样返回合法标识符
     """
-    if not _IDENTIFIER_RE.match(name):
+    if not name or _IDENTIFIER_ANY_FORBIDDEN_RE.search(name):
         raise ValueError(f"非法标识符: {name!r}")
     return name
 
@@ -165,7 +171,7 @@ def create_table(
         raise ValueError("至少需要一列")
     if len(set(columns)) != len(columns):
         raise ValueError(f"列名重复: {columns}")
-    defs = ", ".join(f"{quote_identifier(col)} {validate_type(t)}" for col, t in zip(columns, sql_types))
+    defs = ", ".join(f"{quote_identifier(col)} {validate_type(t)}" for col, t in zip(columns, sql_types, strict=False))
     conn.execute(f"CREATE TABLE {quote_identifier(table)} ({defs})")
     conn.commit()
 
@@ -222,7 +228,7 @@ def table_exists(conn: sqlite3.Connection, table: str) -> bool:
     return cur.fetchone() is not None
 
 
-def table_infos(conn: sqlite3.Connection) -> "list[TableInfo]":
+def table_infos(conn: sqlite3.Connection) -> list[TableInfo]:
     """列出库内全部用户表的元数据（按名称排序）。."""
     cur = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     infos = []
@@ -231,7 +237,7 @@ def table_infos(conn: sqlite3.Connection) -> "list[TableInfo]":
     return infos
 
 
-def column_infos(conn: sqlite3.Connection, table: str) -> "list[ColumnInfo]":
+def column_infos(conn: sqlite3.Connection, table: str) -> list[ColumnInfo]:
     """读取指定表的列元数据（PRAGMA table_info）。."""
     cur = conn.execute(f"PRAGMA table_info({quote_identifier(table)})")
     return [ColumnInfo(row[1], row[2]) for row in cur.fetchall()]
@@ -243,7 +249,7 @@ def row_count_of(conn: sqlite3.Connection, table: str) -> int:
     return int(cur.fetchone()[0])
 
 
-def table_names(conn: sqlite3.Connection) -> "list[str]":
+def table_names(conn: sqlite3.Connection) -> list[str]:
     """列出库内全部用户表名（按名称排序）。."""
     cur = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     return [row[0] for row in cur.fetchall()]
@@ -269,7 +275,7 @@ def fetch_preview(
     conn: sqlite3.Connection,
     table: str,
     limit: int = 200,
-) -> "tuple[list[str], list[tuple]]":
+) -> tuple[list[str], list[tuple[object, ...]]]:
     """读取表前 limit 行用于界面预览。
 
     :param conn: 数据库连接

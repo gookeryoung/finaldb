@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import sqlite3
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
-
-import sqlite3
 
 from finaldb.core.exceptions import UnsupportedFormatError
 from finaldb.core.importers.base import TableData
@@ -86,7 +85,7 @@ def _import_table(conn: sqlite3.Connection, data: TableData, source: str) -> Imp
     table = find_free_table_name(conn, data.name)
     # 采样前 200 行推断列类型（rows 为生成器，islice 不破坏后续迭代）
     sample = list(islice(data.rows, _TYPE_SAMPLE_ROWS))
-    sql_types = [_infer_column_type(sample, i, data.columns[i]) for i in range(len(data.columns))]
+    sql_types = [_infer_column_type(sample, i) for i in range(len(data.columns))]
     create_table(conn, table, list(data.columns), sql_types)
     rows: Iterator[tuple[object, ...]] = iter(sample)
     rest = data.rows
@@ -95,18 +94,15 @@ def _import_table(conn: sqlite3.Connection, data: TableData, source: str) -> Imp
     return ImportResult(table=table, rows=count, source=source)
 
 
-def _infer_column_type(sample: list[tuple[object, ...]], index: int, column: str) -> str:
-    """根据采样行推断指定列的 SQL 类型（列越界按空处理）。."""
+def _infer_column_type(sample: list[tuple[object, ...]], index: int) -> str:
+    """根据采样行推断指定列的 SQL 类型（列越界按空样本处理）。."""
     values = [row[index] for row in sample if index < len(row)]
-    sql_type = infer_sql_type(values)
-    if sql_type == "TEXT" and not values:
-        return "TEXT"
-    return sql_type
+    return infer_sql_type(values)
 
 
 def _chain_iterables(
     first: Iterator[tuple[object, ...]],
-    rest: Iterator[tuple[object, ...]],
+    rest: Iterable[tuple[object, ...]],
 ) -> Iterator[tuple[object, ...]]:
     """串联两个行迭代器（采样行 + 剩余行）。."""
     yield from first

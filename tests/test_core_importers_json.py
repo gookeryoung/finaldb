@@ -103,3 +103,27 @@ def test_json_bool_preserved(tmp_path: Path) -> None:
     f.write_text(json.dumps([{"ok": True, "no": False}]), "utf-8")
     td = next(iter(read_json(f)))
     assert list(td.rows) == [(True, False)]
+
+
+def test_ndjson_non_object_line_raises(tmp_path: Path) -> None:
+    """NDJSON 某行不是对象时报行号。."""
+    f = tmp_path / "arr.ndjson"
+    f.write_text('{"a": 1}\n[1, 2]\n', "utf-8")
+    with pytest.raises(InvalidDataError, match="第 2 行不是对象"):
+        list(read_json(f))
+
+
+def test_ndjson_empty_raises(tmp_path: Path) -> None:
+    """NDJSON 全为空行时报文件为空。."""
+    f = tmp_path / "empty.ndjson"
+    f.write_text("\n\n", "utf-8")
+    with pytest.raises(InvalidDataError, match="为空"):
+        list(read_json(f))
+
+
+def test_json_duplicate_columns_after_sanitize(tmp_path: Path) -> None:
+    """不同原始键清洗后同名时自动去重加后缀。."""
+    f = tmp_path / "dup.json"
+    f.write_text(json.dumps([{"a b": 1}, {"a/b": 2}]), "utf-8")
+    td = next(iter(read_json(f)))
+    assert td.columns == ("a_b", "a_b_2")
