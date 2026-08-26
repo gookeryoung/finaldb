@@ -6,11 +6,13 @@ from finaldb.core.cleaning import CleanReport, CleanRule, CleanSummary, RuleKind
 from finaldb.core.exceptions import (
     CleanError,
     FinaldbError,
+    MergeError,
     TableExistsError,
     UnsupportedFormatError,
     WorkspaceError,
 )
 from finaldb.core.importers import import_file, import_into_workspace
+from finaldb.core.merge import JoinSpec, MergeJob, MergeSummary, dedup_table, join_tables, union_tables
 from finaldb.core.storage.database import TableInfo, connect
 from finaldb.core.workspace import Workspace, WorkspaceManager, WorkspaceMeta
 
@@ -20,6 +22,10 @@ __all__ = [
     "CleanRule",
     "CleanSummary",
     "FinaldbError",
+    "JoinSpec",
+    "MergeError",
+    "MergeJob",
+    "MergeSummary",
     "RuleKind",
     "TableExistsError",
     "TableInfo",
@@ -30,6 +36,9 @@ __all__ = [
     "WorkspaceMeta",
     "clean_table",
     "connect",
+    "dedup_table",
     "import_file",
     "import_into_workspace",
+    "join_tables",
+    "union_tables",
 ]

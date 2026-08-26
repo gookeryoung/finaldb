@@ -6,6 +6,7 @@ __all__ = [
     "CleanError",
     "FinaldbError",
     "InvalidDataError",
+    "MergeError",
     "TableExistsError",
     "UnsupportedFormatError",
     "WorkspaceError",
@@ -18,6 +19,10 @@ class FinaldbError(Exception):
 
 class CleanError(FinaldbError):
     """数据整理相关错误（规则校验失败、源表不存在等）。"""
+
+
+class MergeError(FinaldbError):
+    """合并/去重相关错误（表或键列不存在、模式不支持等）。"""
 
 
 class WorkspaceError(FinaldbError):

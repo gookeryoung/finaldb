@@ -13,11 +13,21 @@ from PySide2.QtGui import QFont, QGuiApplication
 from PySide2.QtQml import QQmlApplicationEngine, qmlRegisterType
 
 from finaldb.gui.controllers.clean_controller import CleanController
+from finaldb.gui.controllers.merge_controller import MergeController
 from finaldb.gui.controllers.preview_controller import PreviewController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import ThemeController, detect_font_families
 
-__all__ = ["apply_global_font", "create_app", "create_engine", "main"]
+__all__ = ["Controllers", "apply_global_font", "create_app", "create_controllers", "create_engine", "main"]
+
+# 控制器装配表：key -> context property 名（P5/P6 新页面在此追加即可）
+Controllers = dict[str, QObject]
+_CONTEXT_NAMES = {
+    "workspace": "WorkspaceCtrl",
+    "preview": "PreviewCtrl",
+    "clean": "CleanCtrl",
+    "merge": "MergeCtrl",
+}
 
 _MAIN_QML = Path(__file__).parent / "gui" / "views" / "Main.qml"
 
@@ -47,25 +57,30 @@ def register_qml_types() -> None:
     register_qml_types.done = True  # type: ignore[attr-defined]
 
 
-def create_controllers() -> tuple[WorkspaceController, PreviewController, CleanController]:
-    """构造页面控制器（以 context property 暴露给 QML）。
+def create_controllers() -> Controllers:
+    """构造页面控制器装配表（以 context property 暴露给 QML）。
 
     Returns:
-        (工作区控制器, 表预览控制器, 清洗控制器) 三元组
+        key 到控制器实例的字典（key 与 ``_CONTEXT_NAMES`` 对应）
     """
-    return WorkspaceController(), PreviewController(), CleanController()
+    return {
+        "workspace": WorkspaceController(),
+        "preview": PreviewController(),
+        "clean": CleanController(),
+        "merge": MergeController(),
+    }
 
 
 def create_engine(
     theme: ThemeController,
-    controllers: tuple[WorkspaceController, PreviewController, CleanController] | None = None,
+    controllers: Controllers | None = None,
     parent: QObject | None = None,
 ) -> QQmlApplicationEngine:
     """构造 QML 引擎并加载主窗口。
 
     Args:
         theme: 主题控制器单例，以 context property ``Theme`` 暴露给 QML
-        controllers: 页面控制器三元组（None 时新建）
+        controllers: 页面控制器装配表（None 时新建）
         parent: 引擎父对象
 
     Returns:
@@ -73,25 +88,25 @@ def create_engine(
     """
     if controllers is None:
         controllers = create_controllers()
-    workspace_ctrl, preview_ctrl, clean_ctrl = controllers
     engine = QQmlApplicationEngine(parent)
     ctx = engine.rootContext()
     ctx.setContextProperty("Theme", theme)  # pyrefly: ignore [missing-argument]
-    ctx.setContextProperty("WorkspaceCtrl", workspace_ctrl)  # pyrefly: ignore [missing-argument]
-    ctx.setContextProperty("PreviewCtrl", preview_ctrl)  # pyrefly: ignore [missing-argument]
-    ctx.setContextProperty("CleanCtrl", clean_ctrl)  # pyrefly: ignore [missing-argument]
+    for key, name in _CONTEXT_NAMES.items():
+        ctrl = controllers.get(key)
+        if ctrl is not None:
+            ctx.setContextProperty(name, ctrl)  # pyrefly: ignore [missing-argument]
     engine.load(QUrl.fromLocalFile(str(_MAIN_QML)))  # pyrefly: ignore [missing-argument]
     return engine
 
 
 def create_app(
-    argv: list[str], controllers: tuple[WorkspaceController, PreviewController, CleanController] | None = None
+    argv: list[str], controllers: Controllers | None = None
 ) -> tuple[QGuiApplication, QQmlApplicationEngine, ThemeController]:
     """构造完整 GUI 应用（可测函数，拆离事件循环）。
 
     Args:
         argv: 命令行参数（透传 QGuiApplication）
-        controllers: 页面控制器二元组（None 时新建）
+        controllers: 页面控制器装配表（None 时新建）
 
     Returns:
         (应用实例, QML 引擎, 主题控制器) 三元组

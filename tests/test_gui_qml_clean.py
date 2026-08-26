@@ -13,13 +13,13 @@ from tests.conftest import find_sidebar, qml_set_prop
 
 pytestmark = pytest.mark.gui
 
-# qml_engine fixture 元组：(引擎, 主题, 根窗口, 工作区控制器, 预览控制器, 清洗控制器)
-QmlFixture = tuple[Any, Any, Any, Any, Any, Any]
+# qml_engine fixture 元组：(引擎, 主题, 根窗口, 工作区控制器, 预览控制器, 清洗控制器, 合并控制器)
+QmlFixture = tuple[Any, Any, Any, Any, Any, Any, Any]
 
 
 def test_cleanpage_loads(qml_engine: QmlFixture) -> None:
     """切换到数据整理页后 CleanPage 成功创建。."""
-    _engine, _theme, root, _ws, _pv, _cl = qml_engine
+    _engine, _theme, root, _ws, _pv, _cl, _mg = qml_engine
     sidebar = find_sidebar(root)
     qml_set_prop(sidebar, "currentPage", "clean")
     QGuiApplication.processEvents()
@@ -31,7 +31,7 @@ def test_cleanpage_loads(qml_engine: QmlFixture) -> None:
 
 def test_cleanpage_rules_and_preview(qml_engine: QmlFixture, tmp_path: Path) -> None:
     """工作区建表后 CleanPage 联动：表加载 → 规则 → 预览。."""
-    _engine, _theme, root, ws, _pv, cl = qml_engine
+    _engine, _theme, root, ws, _pv, cl, _mg = qml_engine
     # 准备工作区与数据
     ws.create_workspace("clean-bind")
     csv = tmp_path / "d.csv"
