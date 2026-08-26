@@ -31,7 +31,7 @@ def test_historypage_loads(qml_engine: QmlFixture) -> None:
 
 def test_historypage_snapshots_diff_restore(qml_engine: QmlFixture, tmp_path: Path) -> None:
     """工作区导入两次后 HistoryPage 联动：快照列表 → 同步对比 → 同步回滚。."""
-    _engine, _theme, root, ws, _pv, _cl, _mg, hist = qml_engine
+    _engine, _theme, root, ws, _pv, _cl, _mg, hist, *_rest = qml_engine
     # 准备工作区与两次导入（每次导入自动打快照）
     ws.create_workspace("hist-bind")
     csv1 = tmp_path / "a.csv"

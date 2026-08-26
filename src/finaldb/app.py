@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -12,10 +13,12 @@ from PySide2.QtCore import QObject, QUrl
 from PySide2.QtGui import QFont, QGuiApplication
 from PySide2.QtQml import QQmlApplicationEngine, qmlRegisterType
 
+from finaldb.gui.controllers.about_controller import AboutController
 from finaldb.gui.controllers.clean_controller import CleanController
 from finaldb.gui.controllers.history_controller import HistoryController
 from finaldb.gui.controllers.merge_controller import MergeController
 from finaldb.gui.controllers.preview_controller import PreviewController
+from finaldb.gui.controllers.stats_controller import StatsController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import ThemeController, detect_font_families
 
@@ -29,9 +32,41 @@ _CONTEXT_NAMES = {
     "clean": "CleanCtrl",
     "merge": "MergeCtrl",
     "history": "HistoryCtrl",
+    "stats": "StatsCtrl",
+    "about": "AboutCtrl",
 }
 
-_MAIN_QML = Path(__file__).parent / "gui" / "views" / "Main.qml"
+
+def _main_qml_path() -> Path:
+    """主窗口 QML 文件路径。
+
+    源码运行取包内相对路径；冻结（PyInstaller）运行时模块 ``__file__``
+    指向 PYZ 归档内的虚拟路径，改从解包目录 ``_MEIPASS`` 定位。
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    if base is not None:
+        frozen = Path(base) / "finaldb" / "gui" / "views" / "Main.qml"
+        if frozen.is_file():
+            return frozen
+    return Path(__file__).parent / "gui" / "views" / "Main.qml"
+
+
+_MAIN_QML = _main_qml_path()
+
+
+def _setup_frozen_paths() -> None:
+    """冻结（PyInstaller）环境下的 Qt 资源路径修正。
+
+    PyInstaller 的 PySide2 钩子不自动注册 QML 模块目录，故在引擎创建前
+    显式设置 ``QML2_IMPORT_PATH`` 指向打包在内的 ``PySide2/Qt/qml``。
+    源码运行时为空操作。
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    if base is None:
+        return
+    qml_dir = Path(base) / "PySide2" / "Qt" / "qml"
+    if qml_dir.is_dir():
+        os.environ["QML2_IMPORT_PATH"] = str(qml_dir)
 
 
 def apply_global_font(app: QGuiApplication) -> None:
@@ -71,6 +106,8 @@ def create_controllers() -> Controllers:
         "clean": CleanController(),
         "merge": MergeController(),
         "history": HistoryController(),
+        "stats": StatsController(),
+        "about": AboutController(),
     }
 
 
@@ -115,6 +152,7 @@ def create_app(
         (应用实例, QML 引擎, 主题控制器) 三元组
     """
     app = QGuiApplication.instance() or QGuiApplication(argv)
+    _setup_frozen_paths()
     apply_global_font(app)
     register_qml_types()
     theme = ThemeController()

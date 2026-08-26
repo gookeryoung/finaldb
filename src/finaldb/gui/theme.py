@@ -80,6 +80,14 @@ class ThemeController(QObject):
             self._dark = value
             self.themeChanged.emit()  # pyrefly: ignore [missing-attribute]
 
+    @Slot(int)  # pyrefly: ignore [not-callable]
+    def setBaseFontSize(self, size: int) -> None:
+        """调整基准字号（12~20px 钳位，QML 设置页滑块调用）。."""
+        clamped = max(12, min(20, int(size)))
+        if self._font_size != clamped:
+            self._font_size = clamped
+            self.themeChanged.emit()  # pyrefly: ignore [missing-attribute]
+
     # ----------------------------- 色彩令牌 -----------------------------
 
     @Property(QColor, notify=themeChanged)  # pyrefly: ignore [not-callable]

@@ -25,6 +25,7 @@ version         = "0.1.0"
 dev = [
     "finaldb[lint,test]",
     "prek>=0.4.5",
+    "pyinstaller>=6.0",
     "tox-uv>=1.13.1",
     "tox>=4.25.0",
 ]

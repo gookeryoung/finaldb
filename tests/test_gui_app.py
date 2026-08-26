@@ -2,9 +2,63 @@
 
 from __future__ import annotations
 
+import os
+import sys
+from pathlib import Path
+
 import pytest
 
 pytestmark = pytest.mark.gui
+
+
+def test_main_qml_path_source_mode() -> None:
+    """源码运行时主 QML 路径应指向包内 views 目录。."""
+    from finaldb.app import _main_qml_path
+
+    path = _main_qml_path()
+    assert path.name == "Main.qml"
+    assert path.is_file()
+
+
+def test_main_qml_path_frozen_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """冻结模式（_MEIPASS 存在且文件在位）应返回解包目录路径。."""
+    from finaldb.app import _main_qml_path
+
+    frozen = tmp_path / "finaldb" / "gui" / "views" / "Main.qml"
+    frozen.parent.mkdir(parents=True)
+    frozen.write_text("// mock", encoding="utf-8")
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert _main_qml_path() == frozen
+
+
+def test_main_qml_path_frozen_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """冻结模式但解包目录缺文件时应回退源码路径。."""
+    from finaldb.app import _main_qml_path
+
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert _main_qml_path().is_file()
+
+
+def test_setup_frozen_paths_sets_qml_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """冻结模式下存在 Qt/qml 目录时应设置 QML2_IMPORT_PATH。."""
+    from finaldb.app import _setup_frozen_paths
+
+    qml_dir = tmp_path / "PySide2" / "Qt" / "qml"
+    qml_dir.mkdir(parents=True)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setenv("QML2_IMPORT_PATH", "")
+    _setup_frozen_paths()
+    assert os.environ["QML2_IMPORT_PATH"] == str(qml_dir)
+
+
+def test_setup_frozen_paths_noop_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """源码运行（无 _MEIPASS）时应为空操作且不动环境变量。."""
+    from finaldb.app import _setup_frozen_paths
+
+    monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+    monkeypatch.setenv("QML2_IMPORT_PATH", "")
+    _setup_frozen_paths()
+    assert os.environ["QML2_IMPORT_PATH"] == ""
 
 
 def test_apply_global_font(qapp: object) -> None:

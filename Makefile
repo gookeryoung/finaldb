@@ -4,7 +4,7 @@
 PACKAGE := finaldb
 COV_THRESHOLD := 95
 
-.PHONY: help sync build b clean c test cov lint typecheck check doc tox bump patch minor major push
+.PHONY: help sync build b clean c test cov lint typecheck check doc tox bump patch minor major push installer package stats
 
 help: ## 显示帮助信息
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z].*:.*##/ {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -14,6 +14,15 @@ sync: ## 安装开发依赖
 
 build b: ## 构建分发包 (wheel + sdist)
 	uv build
+
+installer: ## PyInstaller 打包单文件 GUI 可执行
+	uv run pyinstaller installer/finaldb.spec --noconfirm --distpath dist
+
+package: installer ## NSIS 安装包（依赖 dist/finaldb.exe）
+	makensis installer/finaldb.nsi
+
+stats: ## 打包统计摘要
+	uv run python scripts/build_stats.py
 
 clean c: ## 清理构建产物与缓存
 	rm -rf build/ dist/ wheels/ *.egg-info htmlcov/ .coverage .coverage.* coverage.xml docs/_build/ .tox/

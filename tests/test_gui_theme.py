@@ -77,6 +77,27 @@ def test_spacing_and_radius_tokens(theme: ThemeController) -> None:
     assert theme.sidebarWidth == 200
 
 
+def test_set_base_font_size(theme: ThemeController) -> None:
+    """setBaseFontSize 调整基准字号并发出 themeChanged。."""
+    fired: list[bool] = []
+    theme.themeChanged.connect(lambda: fired.append(True))  # pyrefly: ignore [missing-attribute]
+    theme.setBaseFontSize(16)
+    assert theme.fontSizeBody == 16
+    assert theme.fontSizeHeading == 18
+    assert len(fired) == 1
+    # 重复设置同值不重复发信号
+    theme.setBaseFontSize(16)
+    assert len(fired) == 1
+
+
+def test_set_base_font_size_clamped(theme: ThemeController) -> None:
+    """字号设置钳位到 12~20。."""
+    theme.setBaseFontSize(4)
+    assert theme.fontSizeBody == 12
+    theme.setBaseFontSize(99)
+    assert theme.fontSizeBody == 20
+
+
 def test_detect_font_families_nonempty() -> None:
     """平台字体族探测应返回非空元组且首项为字符串。."""
     families = detect_font_families()
