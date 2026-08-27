@@ -17,19 +17,37 @@ from finaldb.core.storage.database import (
     table_names,
     validate_identifier,
 )
+from finaldb.core.storage.editing import (
+    add_column,
+    coerce_value,
+    delete_rows,
+    drop_column,
+    fetch_rows,
+    insert_row,
+    rename_column,
+    update_cell,
+)
 
 __all__ = [
     "ColumnInfo",
     "TableInfo",
+    "add_column",
+    "coerce_value",
     "connect",
     "create_table",
+    "delete_rows",
+    "drop_column",
     "drop_table",
     "fetch_preview",
+    "fetch_rows",
     "find_free_table_name",
+    "insert_row",
     "insert_rows",
     "quote_identifier",
+    "rename_column",
     "table_exists",
     "table_infos",
     "table_names",
+    "update_cell",
     "validate_identifier",
 ]
