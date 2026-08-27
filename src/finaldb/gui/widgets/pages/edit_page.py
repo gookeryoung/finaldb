@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from PySide2.QtCore import Qt
-from PySide2.QtGui import QShowEvent
+from PySide2.QtGui import QKeySequence, QShowEvent
 from PySide2.QtWidgets import (
+    QApplication,
     QComboBox,
     QHBoxLayout,
     QInputDialog,
     QMessageBox,
     QPushButton,
+    QShortcut,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -95,9 +97,13 @@ class EditPage(QWidget):
         self._drop_col_btn = QPushButton("删列")
         self._drop_col_btn.setToolTip("删除所选列")
         self._drop_col_btn.clicked.connect(self._on_drop_column)
+        self._clear_btn = QPushButton("清空表")
+        self._clear_btn.setToolTip("删除当前表全部行（可撤销）")
+        self._clear_btn.clicked.connect(self._on_clear_table)
         tools.addWidget(self._add_col_btn)
         tools.addWidget(self._rename_col_btn)
         tools.addWidget(self._drop_col_btn)
+        tools.addWidget(self._clear_btn)
         tools.addStretch(1)
         root.addLayout(tools)
 
@@ -147,6 +153,10 @@ class EditPage(QWidget):
 
         self._saved_selection: tuple[int, int] | None = None
         self._on_workspace_changed()
+
+        # Ctrl+C 复制选区为 TSV 文本（可直接粘贴到 Excel/文本编辑器）
+        self._copy_shortcut = QShortcut(QKeySequence.Copy, self._view)
+        self._copy_shortcut.activated.connect(self._on_copy)
 
     # ----------------------------- 工作区与表 -----------------------------
 
@@ -222,6 +232,36 @@ class EditPage(QWidget):
         )
         if answer == QMessageBox.Yes:
             self._edit.delete_rows(rowids)
+
+    def _on_clear_table(self) -> None:
+        """清空当前表全部行（确认，可撤销）。."""
+        if not self._edit.has_table():
+            return
+        table = self._edit.current_table()
+        total = self._edit.total_rows()
+        answer = QMessageBox.question(
+            self,
+            "清空表",
+            f"确定删除表「{table}」全部 {total} 行？（可撤销）",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self._edit.clear_table()
+
+    def _on_copy(self) -> None:
+        """复制选区为 TSV 文本（Ctrl+C，可直接粘贴到 Excel/文本）。."""
+        indexes = self._view.selectionModel().selectedIndexes()
+        if not indexes:
+            return
+        model = self._edit.edit_model()
+        cells: dict[tuple[int, int], str] = {}
+        for index in indexes:
+            value = model.data(index)
+            cells[(index.row(), index.column())] = "" if value is None else str(value)
+        rows = sorted({r for r, _ in cells})
+        cols = sorted({c for _, c in cells})
+        text = "\n".join("\t".join(cells.get((r, c), "") for c in cols) for r in rows)
+        QApplication.clipboard().setText(text)
 
     # ----------------------------- 列操作 -----------------------------
 
@@ -310,6 +350,7 @@ class EditPage(QWidget):
         self._add_col_btn.setEnabled(has_table)
         self._rename_col_btn.setEnabled(has_table)
         self._drop_col_btn.setEnabled(has_table)
+        self._clear_btn.setEnabled(has_table)
         self._prev_btn.setEnabled(has_table and self._edit.current_page() > 0)
         from finaldb.core.editing.service import PAGE_SIZE
 

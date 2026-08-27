@@ -219,3 +219,65 @@ def test_pagination(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> No
     assert edit.current_page() == 2
     assert not page._next_btn.isEnabled()
     window.close()
+
+
+# ----------------------------- 清空表与复制 -----------------------------
+
+
+def test_clear_table_confirm_and_undo(main_window: WindowFixture, tmp_path: Path, qapp: Any, monkeypatch: Any) -> None:
+    """清空表：确认后表空且可撤销恢复；取消则不动。."""
+    from PySide2.QtWidgets import QMessageBox
+
+    import finaldb.gui.widgets.pages.edit_page as edit_mod
+
+    window, *_rest = main_window
+    page = _setup(main_window, tmp_path, qapp)[1]
+    page._on_table_activated(0)
+    qapp.processEvents()
+    edit = page._edit
+    total_before = edit.total_rows()
+
+    # 未开表确认前：取消「否」不动
+    def answer_no(*_a: object, **_k: object) -> int:
+        return QMessageBox.No
+
+    monkeypatch.setattr(edit_mod.QMessageBox, "question", staticmethod(answer_no))
+    page._on_clear_table()
+    qapp.processEvents()
+    assert edit.total_rows() == total_before
+
+    # 确认「是」：清空并可撤销全量恢复
+    def answer_yes(*_a: object, **_k: object) -> int:
+        return QMessageBox.Yes
+
+    monkeypatch.setattr(edit_mod.QMessageBox, "question", staticmethod(answer_yes))
+    page._on_clear_table()
+    qapp.processEvents()
+    assert edit.total_rows() == 0
+
+    edit.undo()
+    qapp.processEvents()
+    assert edit.total_rows() == total_before
+    window.close()
+
+
+def test_copy_selection_tsv(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
+    """Ctrl+C 复制选区为 TSV 文本。."""
+    from PySide2.QtCore import QItemSelectionModel
+    from PySide2.QtWidgets import QApplication
+
+    window, *_rest = main_window
+    page = _setup(main_window, tmp_path, qapp, "name,age\n甲,30\n乙,25\n")[1]
+    page._on_table_activated(0)
+    qapp.processEvents()
+
+    model = page._edit.edit_model()
+    # 选中 (0,0) 与 (1,1)（非矩形选区：补齐为 2x2 网格）
+    view = page._view
+    view.selectionModel().select(model.index(0, 0), QItemSelectionModel.Select)
+    view.selectionModel().select(model.index(1, 1), QItemSelectionModel.Select)
+    page._on_copy()
+    text = QApplication.clipboard().text()
+    assert "甲" in text and "25" in text
+    assert text.count("\t") >= 1
+    window.close()

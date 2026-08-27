@@ -206,3 +206,51 @@ def test_fetch_rows_returns_rowid(service: EditService) -> None:
     conn.close()
     assert names == ["name", "age", "city"]
     assert all(isinstance(r[0], int) and r[0] > 0 for r in rows)
+
+
+# ----------------------------- clear_table -----------------------------
+
+
+def test_clear_table_and_undo(service: EditService) -> None:
+    """清空表 → 撤销按原 rowid 全量复活（数据与行序完整）。."""
+    before = _rowids_of(service)
+    service.clear_table("t")
+    _, rows, total = service.fetch_page("t", 0)
+    assert total == 0 and rows == []
+    assert service.undo_label().startswith("清空")
+
+    service.undo()
+    assert _rowids_of(service) == before
+    _, rows, _ = service.fetch_page("t", 0)
+    assert rows[0][1] == ("甲", 30, "北京")
+    assert rows[2][1] == ("丙", 40, "深圳")
+
+
+def test_clear_table_redo(service: EditService, tmp_path: Path) -> None:
+    """重做 clear_table 删除当时全部行（含撤销后绕过命令栈写入的新行）。."""
+    service.clear_table("t")
+    # 撤销复活后直接 SQL 追加一行（绕过命令栈，模拟外部写入）
+    service.undo()
+    conn = connect(tmp_path / "data.db")
+    insert_rows(conn, "t", ["name", "age", "city"], [("新人", 1, "城")])
+    conn.close()
+    assert len(_rowids_of(service)) == 4
+
+    service.redo()  # 重做清空：当时全部 4 行一并删除
+    assert _rowids_of(service) == []
+    service.undo()  # 再撤销：仅复活快照内 3 行
+    assert len(_rowids_of(service)) == 3
+
+
+def test_clear_table_empty_no_crash(service: EditService) -> None:
+    """空表清空安全无操作，连续清空撤销两次恢复全部。."""
+    service.clear_table("t")
+    service.clear_table("t")  # 第二次快照为空，安全无操作
+    service.undo()
+    conn = _ro(service)
+    assert row_count_of(conn, "t") == 0
+    conn.close()
+    service.undo()
+    conn = _ro(service)
+    assert row_count_of(conn, "t") == 3
+    conn.close()

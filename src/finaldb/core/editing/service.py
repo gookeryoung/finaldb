@@ -59,7 +59,7 @@ PAGE_SIZE = 100
 class EditCommand:
     """一条编辑命令：正向参数 + 逆操作参数。
 
-    :ivar op: 操作类型（set_cell/insert_row/delete_rows/add_column/rename_column/drop_column）
+    :ivar op: 操作类型（set_cell/insert_row/delete_rows/add_column/rename_column/drop_column/clear_table）
     :ivar label: 人读描述（如「修改 t.age」）
     :ivar args: 正向参数（重做时按 _apply_forward 约定执行）
     :ivar undo_args: 逆操作参数（撤销时按 _apply_inverse 约定执行）
@@ -224,6 +224,22 @@ class EditService:
             )
         )
 
+    def clear_table(self, table: str) -> None:
+        """清空表全部行（登记整表快照供撤销按原 rowid 复活）。"""
+        with self._session() as conn:
+            names = [c.name for c in column_infos(conn, table)]
+            col_sql = ", ".join(f'"{c}"' for c in names)
+            snapshots = conn.execute(f'SELECT rowid, {col_sql} FROM "{table}"').fetchall()
+            _delete_rows(conn, table, [int(r[0]) for r in snapshots])
+        self._push(
+            EditCommand(
+                op="clear_table",
+                label=f"清空 {table}（{len(snapshots)} 行）",
+                args=(table,),
+                undo_args=(table, tuple((int(r[0]), tuple(r[1:])) for r in snapshots)),
+            )
+        )
+
     # ----------------------------- 撤销 / 重做 -----------------------------
 
     def undo(self) -> None:
@@ -294,6 +310,10 @@ class EditService:
             _rename_column(conn, table, args[1], args[2])
         elif cmd.op == "drop_column":
             _drop_column(conn, table, args[1])
+        elif cmd.op == "clear_table":
+            # 重做：删除清空后新写入的全部行（再次清空）
+            rowids = [int(r[0]) for r in conn.execute(f'SELECT rowid FROM "{table}"').fetchall()]
+            _delete_rows(conn, table, rowids)
         else:  # pragma: no cover - 未知命令类型
             raise ValueError(f"未知命令: {cmd.op}")
 
@@ -306,7 +326,7 @@ class EditService:
             _update_cell(conn, table, args[1], args[2], args[3])
         elif cmd.op == "insert_row":
             _delete_rows(conn, table, args[1])
-        elif cmd.op == "delete_rows":
+        elif cmd.op in {"delete_rows", "clear_table"}:
             for rowid, values in cast(tuple[tuple[int, tuple[object, ...]], ...], args[1]):
                 _revive_row(conn, table, rowid, values)
         elif cmd.op == "add_column":

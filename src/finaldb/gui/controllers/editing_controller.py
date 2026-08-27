@@ -158,6 +158,17 @@ class EditingController(QObject):
             return
         self._after_row_change()
 
+    def clear_table(self) -> None:
+        """清空当前表全部行（可撤销）。."""
+        if self._service is None or not self._table:
+            return
+        try:
+            self._service.clear_table(self._table)
+        except ValueError as exc:
+            self.error_raised.emit(str(exc))  # pyrefly: ignore [missing-attribute]
+            return
+        self._after_row_change()
+
     def add_column(self, column: str, sql_type: str = "TEXT") -> None:
         """追加新列。."""
         if self._service is None or not self._table:
