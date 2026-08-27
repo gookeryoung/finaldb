@@ -37,14 +37,14 @@ jobs:
         run: uv run pyrefly check
 
   test:
-    name: Test (Python 3.10)
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        # 项目约束 >=3.8,<3.11；PySide2 与测试链仅在 3.10 基线验证通过
-        python-version: ["3.10"]
+        # 项目约束 >=3.8,<3.11；三版本均已本地实测全绿
+        python-version: ["3.8", "3.9", "3.10"]
     steps:
       - uses: actions/checkout@v5
 

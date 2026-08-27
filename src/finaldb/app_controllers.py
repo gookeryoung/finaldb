@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Dict  # noqa: UP035  # 3.8 运行时下标兼容
+
 from PySide2.QtCore import QObject
 
 from finaldb.gui.controllers.about_controller import AboutController
@@ -16,7 +18,8 @@ from finaldb.gui.controllers.workspace_controller import WorkspaceController
 __all__ = ["Controllers", "create_controllers"]
 
 # 控制器装配表：key -> 控制器实例（新页面在此追加即可）
-Controllers = dict[str, QObject]
+# 注：模块级别名在 3.8 运行时求值，须用 typing.Dict 而非内置 dict 下标
+Controllers = Dict[str, QObject]  # noqa: UP006  # 3.8 运行时下标兼容
 
 
 def create_controllers() -> Controllers:

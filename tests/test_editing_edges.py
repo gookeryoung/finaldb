@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Tuple  # noqa: UP035  # 3.8 运行时下标兼容
 
 import pytest
 from PySide2.QtCore import Qt
@@ -17,7 +17,7 @@ from finaldb.gui.models.edit_model import EditableTableModel
 
 pytestmark = pytest.mark.gui
 
-WindowFixture = tuple[Any, ...]
+WindowFixture = Tuple[Any, ...]  # noqa: UP006  # 3.8 运行时下标兼容
 
 
 def _reject_edit(*args: object) -> bool:

@@ -327,7 +327,8 @@ class EditService:
         elif cmd.op == "insert_row":
             _delete_rows(conn, table, args[1])
         elif cmd.op in {"delete_rows", "clear_table"}:
-            for rowid, values in cast(tuple[tuple[int, tuple[object, ...]], ...], args[1]):
+            # cast 首参在运行时求值，3.8 无内置泛型下标，用字符串前向引用
+            for rowid, values in cast("tuple[tuple[int, tuple[object, ...]], ...]", args[1]):
                 _revive_row(conn, table, rowid, values)
         elif cmd.op == "add_column":
             _drop_column(conn, table, args[1])
@@ -336,7 +337,7 @@ class EditService:
         elif cmd.op == "drop_column":
             _, column, sql_type, position, data = args
             _add_column(conn, table, column, sql_type)
-            for rowid, value in cast(tuple[tuple[int, object], ...], data):
+            for rowid, value in cast("tuple[tuple[int, object], ...]", data):
                 _update_cell(conn, table, rowid, column, value)
             # 恢复列的原始次序（add_column 只能追加到末尾）
             _move_column(conn, table, column, position)

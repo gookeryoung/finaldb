@@ -29,7 +29,7 @@ class CleanReport:
         lines = [f"读入行数: {self.total_rows}"]
         if self.dropped_rows:
             lines.append(f"删除行数: {self.dropped_rows}")
-        for rule, hits in zip(rules, self.changed_cells, strict=False):
+        for rule, hits in zip(rules, self.changed_cells):  # noqa: B905  # strict 为 3.10+ 参数
             if hits:
                 lines.append(f"{rule.describe()}: {hits} 处")
         if not self.dropped_rows and not any(self.changed_cells):

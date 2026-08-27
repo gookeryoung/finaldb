@@ -97,10 +97,11 @@ def union_tables(
     if len(tables) < 2:
         raise MergeError("纵向合并至少需要两张表")
     schemas = _schemas_of(conn, tables)
+    if len(schemas) != len(tables):
+        raise MergeError("表结构数量与表数量不一致")
     columns = _union_columns(schemas)
-    rows = chain.from_iterable(
-        _reordered_rows(conn, table, cols, columns) for table, cols in zip(tables, schemas, strict=True)
-    )
+    # zip 不用 strict 参数：其为 3.10+ 特性，长度一致性已由上方显式校验保证
+    rows = chain.from_iterable(_reordered_rows(conn, table, cols, columns) for table, cols in zip(tables, schemas))  # noqa: B905
     base = target if target else "merged"
     summary_text = "、".join(tables)
     return _write_result(

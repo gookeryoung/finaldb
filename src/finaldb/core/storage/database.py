@@ -171,7 +171,8 @@ def create_table(
         raise ValueError("至少需要一列")
     if len(set(columns)) != len(columns):
         raise ValueError(f"列名重复: {columns}")
-    defs = ", ".join(f"{quote_identifier(col)} {validate_type(t)}" for col, t in zip(columns, sql_types, strict=False))
+    # zip 不用 strict 参数：其为 3.10+ 特性，长度一致性已由上方显式校验保证
+    defs = ", ".join(f"{quote_identifier(col)} {validate_type(t)}" for col, t in zip(columns, sql_types))  # noqa: B905
     conn.execute(f"CREATE TABLE {quote_identifier(table)} ({defs})")
     conn.commit()
 

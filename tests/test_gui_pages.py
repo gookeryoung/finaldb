@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Tuple  # noqa: UP035  # 3.8 运行时下标兼容
 
 import pytest
 
 pytestmark = pytest.mark.gui
 
 # main_window fixture 元组：(主窗口, 主题, 工作区/预览/清洗/合并/历史/统计/关于控制器)
-WindowFixture = tuple[Any, ...]
+WindowFixture = Tuple[Any, ...]  # noqa: UP006  # 3.8 运行时下标兼容
 
 
 def _csv(tmp_path: Path, name: str, content: str) -> Path:
