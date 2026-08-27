@@ -59,14 +59,35 @@ def test_create_invalid_name_emits_error(ctrl: WorkspaceController) -> None:
 
 
 def test_select_and_delete_workspace(ctrl: WorkspaceController) -> None:
-    """选择与删除工作区；删除当前工作区清空选择。."""
+    """选择与删除工作区；删除当前工作区后自动切到剩余最近工作区。."""
     ctrl.create_workspace("alpha")
     ctrl.create_workspace("beta")
     ctrl.select_workspace("alpha")
     assert ctrl.current_workspace() == "alpha"
     ctrl.delete_workspace("alpha")
-    assert ctrl.current_workspace() == ""
+    # 剩余 beta：自动选中（刷新时无当前选择则取最近工作区）
+    assert ctrl.current_workspace() == "beta"
     assert ctrl.workspace_model().rowCount() == 1
+    # 删除最后一个工作区后清空选择
+    ctrl.delete_workspace("beta")
+    assert ctrl.current_workspace() == ""
+    assert ctrl.workspace_model().rowCount() == 0
+
+
+def test_refresh_auto_selects_latest_workspace(qapp: object, tmp_path: Path) -> None:
+    """启动（refresh）时无当前选择则自动选中最近工作区并载入表列表。."""
+    root = tmp_path / "ws"
+    boot = WorkspaceController(root=root)
+    boot.create_workspace("alpha")
+    boot.import_file_sync(str(_csv(tmp_path)))
+    assert boot.table_model().rowCount() == 1
+
+    # 模拟重启：新控制器扫描同一根目录，无需手动选择即载入
+    restarted = WorkspaceController(root=root)
+    assert restarted.current_workspace() == "alpha"
+    assert restarted.table_model().rowCount() == 1
+    name = restarted.table_model().table_at(0)
+    assert name is not None and name == "demo"
 
 
 def test_delete_missing_workspace_emits_error(ctrl: WorkspaceController) -> None:

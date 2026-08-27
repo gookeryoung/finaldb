@@ -75,10 +75,19 @@ class WorkspaceController(QObject):
     # ----------------------------- 操作 -----------------------------
 
     def refresh(self) -> None:
-        """刷新工作区列表（保持当前选择有效）。"""
-        self._model.reload(self._manager.list())
+        """刷新工作区列表（保持当前选择有效）。
+
+        当前无选择且清单非空时自动选中最近使用的工作区
+        （list 按更新时间倒序，取首个即可），启动即载入表列表。
+        """
+        metas = self._manager.list()
+        self._model.reload(metas)
         if self._current is not None and not self._current.db_path.parent.exists():
             self._current = None
+            self._reload_tables()
+            self.current_changed.emit()  # pyrefly: ignore [missing-attribute]
+        if self._current is None and metas:
+            self._current = self._manager.open(metas[0].path)
             self._reload_tables()
             self.current_changed.emit()  # pyrefly: ignore [missing-attribute]
         self.workspaces_changed.emit()  # pyrefly: ignore [missing-attribute]
