@@ -1,101 +1,143 @@
-"""ThemeController 令牌与暗色模式切换测试。."""
+"""ThemeManager 令牌、QSS 生成与暗色模式切换测试。."""
 
 from __future__ import annotations
 
 import pytest
-from PySide2.QtGui import QColor
 
-from finaldb.gui.theme import ThemeController, detect_font_families
+from finaldb.gui.theme import (
+    RADIUS_LG,
+    RADIUS_MD,
+    RADIUS_SM,
+    SIDEBAR_WIDTH,
+    SPACING_LG,
+    SPACING_MD,
+    SPACING_SM,
+    SPACING_XL,
+    SPACING_XS,
+    ThemeManager,
+    build_qss,
+    detect_font_families,
+)
+
+# 不随主题切换的功能色名
+_FIXED_COLORS = ("danger", "warning", "success", "text_on_primary")
 
 
 @pytest.fixture()
-def theme() -> ThemeController:
-    """每个用例独立的主题控制器。."""
-    return ThemeController()
+def theme() -> ThemeManager:
+    """每个用例独立的主题管理器。."""
+    return ThemeManager()
 
 
-def test_default_light_mode(theme: ThemeController) -> None:
+def test_default_light_mode(theme: ThemeManager) -> None:
     """默认应为浅色模式。."""
-    assert theme.isDark is False
-    assert theme.isLight is True
+    assert theme.is_dark() is False
 
 
-def test_set_dark_toggles_and_notifies(theme: ThemeController) -> None:
-    """setDark 切换后 isDark 翻转且发出 themeChanged 信号。."""
+def test_set_dark_toggles_and_notifies(theme: ThemeManager) -> None:
+    """set_dark 切换后 is_dark 翻转且发出 theme_changed 信号。."""
     fired: list[bool] = []
-    theme.themeChanged.connect(lambda: fired.append(True))  # pyrefly: ignore [missing-attribute]
-    theme.setDark(True)
-    assert theme.isDark is True
-    assert theme.isLight is False
+    theme.theme_changed.connect(lambda: fired.append(True))  # pyrefly: ignore [missing-attribute]
+    theme.set_dark(True)
+    assert theme.is_dark() is True
     assert len(fired) == 1
     # 重复设置同值不重复发信号
-    theme.setDark(True)
+    theme.set_dark(True)
     assert len(fired) == 1
 
 
-def test_light_palette(theme: ThemeController) -> None:
+def test_light_palette(theme: ThemeManager) -> None:
     """浅色模式色板应为 GitHub Desktop 风格。."""
-    assert theme.colorPrimary == QColor("#0366D6")
-    assert theme.colorTextPrimary == QColor("#24292E")
-    assert theme.colorBgApp == QColor("#F5F6F8")
-    assert theme.colorBgCard == QColor("#FFFFFF")
+    assert theme.color("primary") == "#0366D6"
+    assert theme.color("text_primary") == "#24292E"
+    assert theme.color("bg_app") == "#F5F6F8"
+    assert theme.color("bg_card") == "#FFFFFF"
 
 
-def test_dark_palette(theme: ThemeController) -> None:
+def test_dark_palette(theme: ThemeManager) -> None:
     """暗色模式色板应为 Tokyo Night 风格。."""
-    theme.setDark(True)
-    assert theme.colorPrimary == QColor("#7AA2F7")
-    assert theme.colorTextPrimary == QColor("#E0E0EF")
-    assert theme.colorBgApp == QColor("#1A1B26")
-    assert theme.colorBgCard == QColor("#1E1F2A")
-    assert theme.colorSidebarDark == QColor("#16161E")
+    theme.set_dark(True)
+    assert theme.color("primary") == "#7AA2F7"
+    assert theme.color("text_primary") == "#E0E0EF"
+    assert theme.color("bg_app") == "#1A1B26"
+    assert theme.color("bg_card") == "#1E1F2A"
+    assert theme.color("sidebar") == "#16161E"
 
 
-def test_fixed_colors(theme: ThemeController) -> None:
+def test_fixed_colors(theme: ThemeManager) -> None:
     """功能色不随主题切换。."""
-    dark_before = (theme.colorDanger, theme.colorWarning, theme.colorSuccess, theme.colorTextOnPrimary)
-    theme.setDark(True)
-    dark_after = (theme.colorDanger, theme.colorWarning, theme.colorSuccess, theme.colorTextOnPrimary)
-    assert dark_before == dark_after
+    before = tuple(theme.color(name) for name in _FIXED_COLORS)
+    theme.set_dark(True)
+    after = tuple(theme.color(name) for name in _FIXED_COLORS)
+    assert before == after
 
 
-def test_typography_tokens(theme: ThemeController) -> None:
+def test_palette_switch(theme: ThemeManager) -> None:
+    """palette 随暗色模式在两组色板间切换。."""
+    light = theme.palette()
+    assert light["primary"] == "#0366D6"
+    theme.set_dark(True)
+    assert theme.palette()["primary"] == "#7AA2F7"
+
+
+def test_typography_tokens(theme: ThemeManager) -> None:
     """字号令牌基于基准 14px 派生。."""
-    assert theme.fontSizeBody == 14
-    assert theme.fontSizeHeading == 16
-    assert theme.fontSizeTitle == 18
-    assert theme.fontSizePageTitle == 22
-    assert theme.fontSizeCaption == 12
-    assert theme.fontSizeSmall == 13
+    assert theme.font_size_body() == 14
+    assert theme.font_size_heading() == 16
+    assert theme.font_size_title() == 18
+    assert theme.font_size_page_title() == 22
+    assert theme.font_size_caption() == 12
+    assert theme.font_size_small() == 13
 
 
-def test_spacing_and_radius_tokens(theme: ThemeController) -> None:
+def test_spacing_and_radius_constants() -> None:
     """间距按 8px 基准网格，圆角 4/6/8。."""
-    assert (theme.spacingXs, theme.spacingSm) == (4, 8)
-    assert (theme.spacingMd, theme.spacingLg, theme.spacingXl) == (16, 24, 32)
-    assert (theme.radiusSm, theme.radiusMd, theme.radiusLg) == (4, 6, 8)
-    assert theme.sidebarWidth == 200
+    assert (SPACING_XS, SPACING_SM) == (4, 8)
+    assert (SPACING_MD, SPACING_LG, SPACING_XL) == (16, 24, 32)
+    assert (RADIUS_SM, RADIUS_MD, RADIUS_LG) == (4, 6, 8)
+    assert SIDEBAR_WIDTH == 200
 
 
-def test_set_base_font_size(theme: ThemeController) -> None:
-    """setBaseFontSize 调整基准字号并发出 themeChanged。."""
+def test_set_base_font_size(theme: ThemeManager) -> None:
+    """set_base_font_size 调整基准字号并发出 theme_changed。."""
     fired: list[bool] = []
-    theme.themeChanged.connect(lambda: fired.append(True))  # pyrefly: ignore [missing-attribute]
-    theme.setBaseFontSize(16)
-    assert theme.fontSizeBody == 16
-    assert theme.fontSizeHeading == 18
+    theme.theme_changed.connect(lambda: fired.append(True))  # pyrefly: ignore [missing-attribute]
+    theme.set_base_font_size(16)
+    assert theme.font_size_body() == 16
+    assert theme.font_size_heading() == 18
     assert len(fired) == 1
     # 重复设置同值不重复发信号
-    theme.setBaseFontSize(16)
+    theme.set_base_font_size(16)
     assert len(fired) == 1
 
 
-def test_set_base_font_size_clamped(theme: ThemeController) -> None:
+def test_set_base_font_size_clamped(theme: ThemeManager) -> None:
     """字号设置钳位到 12~20。."""
-    theme.setBaseFontSize(4)
-    assert theme.fontSizeBody == 12
-    theme.setBaseFontSize(99)
-    assert theme.fontSizeBody == 20
+    theme.set_base_font_size(4)
+    assert theme.font_size_body() == 12
+    theme.set_base_font_size(99)
+    assert theme.font_size_body() == 20
+
+
+def test_font_family_matches_platform_default(theme: ThemeManager) -> None:
+    """font_family 返回平台默认字体族首项。."""
+    assert theme.font_family() == detect_font_families()[0]
+
+
+def test_build_qss_light(theme: ThemeManager) -> None:
+    """浅色 QSS 含主色与基准字号。."""
+    qss = build_qss(theme)
+    assert "#0366D6" in qss
+    assert "font-size: 14px" in qss
+
+
+def test_build_qss_dark_and_font_size(theme: ThemeManager) -> None:
+    """暗色与自定义字号反映到 QSS。."""
+    theme.set_dark(True)
+    theme.set_base_font_size(16)
+    qss = build_qss(theme)
+    assert "#7AA2F7" in qss
+    assert "font-size: 16px" in qss
 
 
 def test_detect_font_families_nonempty() -> None:

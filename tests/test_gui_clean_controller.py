@@ -67,27 +67,27 @@ def _connect_signals(ctrl: CleanController) -> list[tuple[str, str]]:
 def test_load_tables(clean_setup: tuple[CleanController, Path]) -> None:
     """load_tables 加载表列表。."""
     ctrl, _ws = clean_setup
-    assert ctrl.tablesModel.rowCount() == 1
-    assert ctrl.tablesModel.table_at(0) == "t"
+    assert ctrl.tables_model().rowCount() == 1
+    assert ctrl.tables_model().table_at(0) == "t"
 
 
 def test_load_tables_empty_path(clean_setup: tuple[CleanController, Path]) -> None:
     """空路径清空表列表。."""
     ctrl, _ws = clean_setup
     ctrl.load_tables("")
-    assert ctrl.tablesModel.rowCount() == 0
+    assert ctrl.tables_model().rowCount() == 0
 
 
 def test_load_columns(clean_setup: tuple[CleanController, Path]) -> None:
     """load_columns 加载列名列表。."""
     ctrl, ws = clean_setup
     ctrl.load_columns(str(ws), "t")
-    assert ctrl.columnsModel.rowCount() == 2
-    assert ctrl.columnsModel.item_at(0) == "name"
-    assert ctrl.columnsModel.item_at(1) == "age"
+    assert ctrl.columns_model().rowCount() == 2
+    assert ctrl.columns_model().item_at(0) == "name"
+    assert ctrl.columns_model().item_at(1) == "age"
     # 空参数清空
     ctrl.load_columns("", "")
-    assert ctrl.columnsModel.rowCount() == 0
+    assert ctrl.columns_model().rowCount() == 0
 
 
 def test_add_and_remove_rules(clean_setup: tuple[CleanController, Path]) -> None:
@@ -96,17 +96,17 @@ def test_add_and_remove_rules(clean_setup: tuple[CleanController, Path]) -> None
     signals = _connect_signals(ctrl)
     ctrl.add_rule("trim", "name", "", "", "")
     ctrl.add_rule("to_number", "age", "", "", "")
-    assert ctrl.rulesModel.rowCount() == 2
-    rule = ctrl.rulesModel.rule_at(0)
+    assert ctrl.rules_model().rowCount() == 2
+    rule = ctrl.rules_model().rule_at(0)
     assert rule is not None and rule.column == "name"
     ctrl.remove_rule(0)
-    assert ctrl.rulesModel.rowCount() == 1
+    assert ctrl.rules_model().rowCount() == 1
     ctrl.remove_rule(99)  # 越界静默
-    assert ctrl.rulesModel.rowCount() == 1
+    assert ctrl.rules_model().rowCount() == 1
     ctrl.clear_rules()
-    assert ctrl.rulesModel.rowCount() == 0
-    assert ctrl.previewModel.rowCount() == 0
-    assert ctrl.reportText == ""
+    assert ctrl.rules_model().rowCount() == 0
+    assert ctrl.preview_model().rowCount() == 0
+    assert ctrl.report_text() == ""
     assert signals == []
 
 
@@ -122,7 +122,7 @@ def test_add_rule_invalid_params(clean_setup: tuple[CleanController, Path]) -> N
     ctrl.add_rule("replace", "name", "", "x", "")
     # FILL 缺参数
     ctrl.add_rule("fill_missing", "name", "", "", "")
-    assert ctrl.rulesModel.rowCount() == 0
+    assert ctrl.rules_model().rowCount() == 0
     assert len(signals) == 4
     assert all(kind == "error" for kind, _msg in signals)
 
@@ -131,12 +131,12 @@ def test_add_rule_case_mode(clean_setup: tuple[CleanController, Path]) -> None:
     """case 规则的大小写模式正确解析。."""
     ctrl, _ws = clean_setup
     ctrl.add_rule("case", "name", "", "", "upper")
-    rule = ctrl.rulesModel.rule_at(0)
+    rule = ctrl.rules_model().rule_at(0)
     assert rule is not None
     assert rule.case_mode.value == "upper"
     # 默认模式
     ctrl.add_rule("case", "name", "", "", "")
-    rule2 = ctrl.rulesModel.rule_at(1)
+    rule2 = ctrl.rules_model().rule_at(1)
     assert rule2 is not None
     assert rule2.case_mode.value == "lower"
 
@@ -156,13 +156,13 @@ def test_preview_populates_model_and_report(clean_setup: tuple[CleanController, 
     ctrl.add_rule("trim", "name", "", "", "")
     ctrl.preview(str(ws), "t")
     QGuiApplication.processEvents()
-    assert ctrl.previewModel.rowCount() == 3
-    assert ctrl.previewModel.columnCount() == 2
+    assert ctrl.preview_model().rowCount() == 3
+    assert ctrl.preview_model().columnCount() == 2
     # 预览数据已应用 TRIM（首行 name 去除空白）
-    idx = ctrl.previewModel.index(0, 0)
-    assert ctrl.previewModel.data(idx) == "甲"
-    assert "读入行数: 3" in ctrl.reportText  # pyrefly: ignore [not-iterable]
-    assert "去除首尾空白" in ctrl.reportText  # pyrefly: ignore [not-iterable]
+    idx = ctrl.preview_model().index(0, 0)
+    assert ctrl.preview_model().data(idx) == "甲"
+    assert "读入行数: 3" in ctrl.report_text()
+    assert "去除首尾空白" in ctrl.report_text()
     assert signals == []
 
 
@@ -173,7 +173,7 @@ def test_preview_invalid_rule_reports_error(clean_setup: tuple[CleanController, 
     # 直接操纵底层模型注入非法规则（绕过 add_rule 校验）
     from finaldb.core.cleaning.rules import CleanRule, RuleKind
 
-    ctrl.rulesModel.append_rule(CleanRule(RuleKind.TRIM, "nope"))
+    ctrl.rules_model().append_rule(CleanRule(RuleKind.TRIM, "nope"))
     ctrl.preview(str(ws), "t")
     assert signals and signals[0][0] == "error"
     assert "不存在的列" in signals[0][1]
@@ -223,7 +223,7 @@ def test_apply_sync_failure_emits_failed(clean_setup: tuple[CleanController, Pat
 def test_busy_property_roundtrip(qapp: QGuiApplication) -> None:
     """busy 属性默认 False 且信号触发（内部状态机由线程回调维护）。."""
     ctrl = CleanController()
-    assert ctrl.busy is False
+    assert ctrl.is_busy() is False
 
 
 def test_apply_async_thread(clean_setup: tuple[CleanController, Path], qapp: QGuiApplication) -> None:
@@ -232,12 +232,12 @@ def test_apply_async_thread(clean_setup: tuple[CleanController, Path], qapp: QGu
     signals = _connect_signals(ctrl)
     ctrl.add_rule("trim", "name", "", "", "")
     ctrl.apply(str(ws), "t", "async_clean")
-    assert ctrl.busy is True
+    assert ctrl.is_busy() is True
     deadline = time.monotonic() + 5.0
-    while ctrl.busy and time.monotonic() < deadline:
+    while ctrl.is_busy() and time.monotonic() < deadline:
         qapp.processEvents()
         time.sleep(0.02)
-    assert not ctrl.busy
+    assert not ctrl.is_busy()
     assert signals and signals[0][0] == "applied"
     assert "async_clean" in signals[0][1]
 

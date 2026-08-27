@@ -1,14 +1,14 @@
-"""清洗控制器：桥接 core 清洗引擎与 QML 数据整理页。
+"""清洗控制器：桥接 core 清洗引擎与 Widgets 数据整理页。
 
 职责：表/列加载、规则增删管理、预览（含统计报告）、后台清洗落库。
-界面只连接本控制器的信号与槽，不直接触碰 core。
+界面只连接本控制器的信号与调用其方法，不直接触碰 core。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide2.QtCore import Property, QObject, QThread, Signal, Slot
+from PySide2.QtCore import QObject, QThread, Signal
 
 from finaldb.core.cleaning.engine import apply_rules
 from finaldb.core.cleaning.rules import CaseMode, CleanRule, RuleKind
@@ -25,7 +25,7 @@ _PREVIEW_LIMIT = 200
 
 
 class CleanController(QObject):
-    """数据整理页控制器（QML 绑定 ``CleanCtrl``）。."""
+    """数据整理页控制器。."""
 
     columns_changed = Signal()
     report_changed = Signal()
@@ -46,43 +46,34 @@ class CleanController(QObject):
         self._thread: QThread | None = None
         self._worker: CleanWorker | None = None
 
-    # ----------------------------- 属性 -----------------------------
+    # ----------------------------- 只读访问 -----------------------------
 
-    @Property(QObject, notify=columns_changed)  # pyrefly: ignore [not-callable]
-    def tablesModel(self) -> TableListModel:
-        """表列表模型（notify 仅满足 QML 绑定要求）。."""
+    def tables_model(self) -> TableListModel:
+        """表列表模型。."""
         return self._tables_model
 
-    @Property(QObject, notify=columns_changed)  # pyrefly: ignore [not-callable]
-    def columnsModel(self) -> StringListModel:
+    def columns_model(self) -> StringListModel:
         """列名列表模型。."""
         return self._columns_model
 
-    @Property(QObject, notify=columns_changed)  # pyrefly: ignore [not-callable]
-    def rulesModel(self) -> CleanRuleListModel:
+    def rules_model(self) -> CleanRuleListModel:
         """规则列表模型。."""
         return self._rules_model
 
-    @Property(QObject, notify=report_changed)  # pyrefly: ignore [not-callable]
-    def previewModel(self) -> TablePreviewModel:
+    def preview_model(self) -> TablePreviewModel:
         """清洗预览表格模型。."""
         return self._preview_model
 
-    def _get_report_text(self) -> str:
+    def report_text(self) -> str:
         """预览统计报告文本（多行）。."""
         return self._report_text
 
-    reportText = Property(str, _get_report_text, notify=report_changed)
-
-    def _get_busy(self) -> bool:
+    def is_busy(self) -> bool:
         """是否正在执行后台清洗。."""
         return self._busy
 
-    busy = Property(bool, _get_busy, notify=busy_changed)
+    # ----------------------------- 操作 -----------------------------
 
-    # ----------------------------- 槽 -----------------------------
-
-    @Slot(str)  # pyrefly: ignore [not-callable]
     def load_tables(self, workspace_path: str) -> None:
         """加载工作区的表列表。."""
         if not workspace_path:
@@ -95,7 +86,6 @@ class CleanController(QObject):
             conn.close()
         self._tables_model.reload([(t.name, t.row_count) for t in infos])
 
-    @Slot(str, str)  # pyrefly: ignore [not-callable]
     def load_columns(self, workspace_path: str, table: str) -> None:
         """加载指定表的列名列表。."""
         if not workspace_path or not table:
@@ -108,7 +98,6 @@ class CleanController(QObject):
             conn.close()
         self._columns_model.reload([c.name for c in infos])
 
-    @Slot(str, str)  # pyrefly: ignore [not-callable]
     def preview(self, workspace_path: str, table: str) -> None:
         """对表前 200 行应用当前规则并刷新预览与统计。."""
         rules = self._rules_model.rules()
@@ -131,7 +120,6 @@ class CleanController(QObject):
         self._report_text = header + "\n" + "\n".join(report.format_lines(rules))
         self.report_changed.emit()  # pyrefly: ignore [missing-attribute]
 
-    @Slot(str, str, str, str, str, str)  # pyrefly: ignore [not-callable]
     def add_rule(self, kind: str, column: str, value: str, replacement: str, case_mode: str) -> None:
         """构造并追加一条规则（参数非法即报错）。."""
         if not column:
@@ -155,12 +143,10 @@ class CleanController(QObject):
             return
         self._rules_model.append_rule(rule)
 
-    @Slot(int)  # pyrefly: ignore [not-callable]
     def remove_rule(self, row: int) -> None:
         """删除指定行的规则。."""
         self._rules_model.remove_row(row)
 
-    @Slot()  # pyrefly: ignore [not-callable]
     def clear_rules(self) -> None:
         """清空全部规则与预览。."""
         self._rules_model.clear()
@@ -168,7 +154,6 @@ class CleanController(QObject):
         self._report_text = ""
         self.report_changed.emit()  # pyrefly: ignore [missing-attribute]
 
-    @Slot(str, str, str)  # pyrefly: ignore [not-callable]
     def apply(self, workspace_path: str, table: str, target: str) -> None:
         """后台清洗落库（源表不动，结果写入新表）。"""
         if self._busy:

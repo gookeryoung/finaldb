@@ -81,8 +81,8 @@ def test_load_history(history_setup: tuple[HistoryController, Path, SnapshotInfo
     """load_history 按时间倒序加载快照列表。."""
     ctrl, ws, _first, second = history_setup
     ctrl.load_history(str(ws))
-    assert ctrl.snapshotsModel.rowCount() == 2
-    top = ctrl.snapshotsModel.snapshot_at(0)
+    assert ctrl.snapshots_model().rowCount() == 2
+    top = ctrl.snapshots_model().snapshot_at(0)
     assert top is not None and top.short_id == second.short_id
 
 
@@ -91,7 +91,7 @@ def test_load_history_empty_path(history_setup: tuple[HistoryController, Path, S
     ctrl, ws, _first, _second = history_setup
     ctrl.load_history(str(ws))
     ctrl.load_history("")
-    assert ctrl.snapshotsModel.rowCount() == 0
+    assert ctrl.snapshots_model().rowCount() == 0
 
 
 def test_commit_sync(
@@ -109,7 +109,7 @@ def test_commit_sync(
     assert signals and signals[0][0] == "applied"
     assert "已提交快照" in signals[0][1]
     ctrl.load_history(str(ws))
-    assert ctrl.snapshotsModel.rowCount() == 3
+    assert ctrl.snapshots_model().rowCount() == 3
 
 
 def _open(ws: Path) -> sqlite3.Connection:
@@ -152,12 +152,12 @@ def test_diff_sync(
     """同步对比两个快照：diffText 更新并含表级行数。"""
     ctrl, ws, first, second = history_setup
     signals = _connect_signals(ctrl)
-    assert ctrl.diffText == ""
+    assert ctrl.diff_text() == ""
     ctrl.diff_sync(str(ws), first.short_id, second.short_id)
     qapp.processEvents()
     assert signals and signals[0][0] == "applied"
-    assert "表 t" in ctrl.diffText
-    assert "3 行" in ctrl.diffText
+    assert "表 t" in ctrl.diff_text()
+    assert "3 行" in ctrl.diff_text()
 
 
 def test_restore_empty_ref_error(
@@ -187,7 +187,7 @@ def test_diff_empty_ref_error(
 def test_busy_property_default(qapp: QGuiApplication) -> None:
     """busy 属性默认 False。."""
     ctrl = HistoryController()
-    assert ctrl.busy is False
+    assert ctrl.is_busy() is False
 
 
 def test_commit_async_thread(
@@ -201,11 +201,11 @@ def test_commit_async_thread(
     conn.commit()
     conn.close()
     ctrl.commit(str(ws), "异步新增戊")
-    assert ctrl.busy is True
+    assert ctrl.is_busy() is True
     deadline = time.monotonic() + 5.0
-    while ctrl.busy and time.monotonic() < deadline:
+    while ctrl.is_busy() and time.monotonic() < deadline:
         qapp.processEvents()
         time.sleep(0.02)
-    assert not ctrl.busy
+    assert not ctrl.is_busy()
     assert signals and signals[0][0] == "applied"
     assert "异步新增戊" in signals[0][1]

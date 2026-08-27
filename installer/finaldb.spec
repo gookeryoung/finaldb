@@ -3,14 +3,11 @@
 
 注意：
 - 排除开发内部目录（tests/docs/.github 等，见 excludes）
-- QML 视图文件随 finaldb 包数据收集（collect_data_files）
+- Widgets 界面无外部资源文件，无需 collect_data_files
 - UPX 关闭：Win7 兼容目标下 UPX 压缩的 Qt DLL 易误报且收益有限
 """
 
 import os
-
-import PySide2
-from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
@@ -19,18 +16,8 @@ _REPO = os.path.abspath(os.path.join(SPECPATH, ".."))
 _ENTRY = os.path.join(_REPO, "src", "finaldb", "app.py")
 _SRC = os.path.join(_REPO, "src")
 
-# finaldb 包内非 Python 资源（gui/views 下全部 QML）
-datas = collect_data_files("finaldb")
-
-# PyInstaller 的 PySide2 钩子不收集 Qt 的 QML 模块目录（QtQuick.Controls 等），
-# 需整树打包到 PySide2/Qt/qml，运行时由 app.py 设置 QML2_IMPORT_PATH 指向
-_QML_ROOT = os.path.join(os.path.dirname(PySide2.__file__), "Qt", "qml")
+datas = []
 binaries = []
-for _root, _dirs, _files in os.walk(_QML_ROOT):
-    for _name in _files:
-        _src = os.path.join(_root, _name)
-        _rel = os.path.relpath(_src, _QML_ROOT)
-        binaries.append((_src, os.path.join("PySide2", "Qt", "qml", os.path.dirname(_rel))))
 
 hiddenimports = [
     # dulwich porcelain 经由 dulwich 包名动态分发，显式声明保险

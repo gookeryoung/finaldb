@@ -3,3 +3,12 @@ project-excludes = [".venv/**", "template/**"]
 project-includes = ["**/*.ipynb", "**/*.py*"]
 python-version   = "3.10"
 search-path      = ["."]
+
+[errors]
+# PySide2 自带 stubs 质量缺陷：addWidget/setContentsMargins/setText 等 Qt API
+# 的调用形状检查均为误报（QML→Widgets 迁移后 UI 布局代码进 Python 才暴露），
+# 故全局关闭这四类调用形状检查；core 纯 Python 代码不受影响。
+bad-argument-count = false
+bad-argument-type  = false
+missing-argument   = false
+unexpected-keyword = false

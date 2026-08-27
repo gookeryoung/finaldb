@@ -1,72 +1,21 @@
-"""finaldb GUI 应用入口：构造 QGuiApplication 与 QQmlApplicationEngine。
+"""finaldb GUI 应用入口：构造 QApplication（Widgets）与主窗口。
 
 仅支持 PySide2（Win7 发布目标），运行时环境为 Python 3.10。
 """
 
 from __future__ import annotations
 
-import os
 import sys
-from pathlib import Path
 
-from PySide2.QtCore import QObject, QUrl
+from PySide2.QtCore import QObject
 from PySide2.QtGui import QFont, QGuiApplication
-from PySide2.QtQml import QQmlApplicationEngine, qmlRegisterType
+from PySide2.QtWidgets import QApplication, QMainWindow
 
-from finaldb.gui.controllers.about_controller import AboutController
-from finaldb.gui.controllers.clean_controller import CleanController
-from finaldb.gui.controllers.history_controller import HistoryController
-from finaldb.gui.controllers.merge_controller import MergeController
-from finaldb.gui.controllers.preview_controller import PreviewController
-from finaldb.gui.controllers.stats_controller import StatsController
-from finaldb.gui.controllers.workspace_controller import WorkspaceController
-from finaldb.gui.theme import ThemeController, detect_font_families
+from finaldb.app_controllers import Controllers, create_controllers
+from finaldb.gui.theme import ThemeManager, build_qss, detect_font_families
+from finaldb.gui.widgets.main_window import MainWindow
 
-__all__ = ["Controllers", "apply_global_font", "create_app", "create_controllers", "create_engine", "main"]
-
-# 控制器装配表：key -> context property 名（P6 新页面在此追加即可）
-Controllers = dict[str, QObject]
-_CONTEXT_NAMES = {
-    "workspace": "WorkspaceCtrl",
-    "preview": "PreviewCtrl",
-    "clean": "CleanCtrl",
-    "merge": "MergeCtrl",
-    "history": "HistoryCtrl",
-    "stats": "StatsCtrl",
-    "about": "AboutCtrl",
-}
-
-
-def _main_qml_path() -> Path:
-    """主窗口 QML 文件路径。
-
-    源码运行取包内相对路径；冻结（PyInstaller）运行时模块 ``__file__``
-    指向 PYZ 归档内的虚拟路径，改从解包目录 ``_MEIPASS`` 定位。
-    """
-    base = getattr(sys, "_MEIPASS", None)
-    if base is not None:
-        frozen = Path(base) / "finaldb" / "gui" / "views" / "Main.qml"
-        if frozen.is_file():
-            return frozen
-    return Path(__file__).parent / "gui" / "views" / "Main.qml"
-
-
-_MAIN_QML = _main_qml_path()
-
-
-def _setup_frozen_paths() -> None:
-    """冻结（PyInstaller）环境下的 Qt 资源路径修正。
-
-    PyInstaller 的 PySide2 钩子不自动注册 QML 模块目录，故在引擎创建前
-    显式设置 ``QML2_IMPORT_PATH`` 指向打包在内的 ``PySide2/Qt/qml``。
-    源码运行时为空操作。
-    """
-    base = getattr(sys, "_MEIPASS", None)
-    if base is None:
-        return
-    qml_dir = Path(base) / "PySide2" / "Qt" / "qml"
-    if qml_dir.is_dir():
-        os.environ["QML2_IMPORT_PATH"] = str(qml_dir)
+__all__ = ["apply_global_font", "apply_theme", "create_app", "create_main_window", "main"]
 
 
 def apply_global_font(app: QGuiApplication) -> None:
@@ -80,93 +29,49 @@ def apply_global_font(app: QGuiApplication) -> None:
     app.setFont(font)
 
 
-def register_qml_types() -> None:
-    """注册 Python 类型到 QML 类型系统（幂等，重复调用只注册一次）。
-
-    qmlRegisterType 重复注册同一 (URI, version, name) 会导致 QML import
-    失败（多引擎/多测试场景），故在函数对象上挂守卫标志只注册一次。
-    """
-    if getattr(register_qml_types, "done", False):
-        return
-    # URI=FinalDB.Theme，QML 用 `import FinalDB.Theme 1.0` 后声明
-    # `property ThemeController theme: Theme` 类型化访问 context property
-    qmlRegisterType(ThemeController, "FinalDB.Theme", 1, 0, "ThemeController")  # pyrefly: ignore [bad-argument-type]
-    register_qml_types.done = True  # type: ignore[attr-defined]
+def apply_theme(app: QApplication, theme: ThemeManager) -> None:
+    """生成当前主题 QSS 并整体应用到应用。."""
+    app.setStyleSheet(build_qss(theme))
 
 
-def create_controllers() -> Controllers:
-    """构造页面控制器装配表（以 context property 暴露给 QML）。
-
-    Returns:
-        key 到控制器实例的字典（key 与 ``_CONTEXT_NAMES`` 对应）
-    """
-    return {
-        "workspace": WorkspaceController(),
-        "preview": PreviewController(),
-        "clean": CleanController(),
-        "merge": MergeController(),
-        "history": HistoryController(),
-        "stats": StatsController(),
-        "about": AboutController(),
-    }
-
-
-def create_engine(
-    theme: ThemeController,
-    controllers: Controllers | None = None,
-    parent: QObject | None = None,
-) -> QQmlApplicationEngine:
-    """构造 QML 引擎并加载主窗口。
+def create_main_window(theme: ThemeManager, controllers: Controllers, parent: QObject | None = None) -> QMainWindow:
+    """构造主窗口（可测函数，与事件循环解耦）。
 
     Args:
-        theme: 主题控制器单例，以 context property ``Theme`` 暴露给 QML
-        controllers: 页面控制器装配表（None 时新建）
-        parent: 引擎父对象
+        theme: 主题管理器
+        controllers: 页面控制器装配表（key 见 ``finaldb.app_controllers``）
+        parent: 父对象
 
     Returns:
-        已加载 ``Main.qml`` 的引擎（加载失败时 rootObjects 为空）
+        已装配侧边栏与七页栈的主窗口
     """
-    if controllers is None:
-        controllers = create_controllers()
-    engine = QQmlApplicationEngine(parent)
-    ctx = engine.rootContext()
-    ctx.setContextProperty("Theme", theme)  # pyrefly: ignore [missing-argument]
-    for key, name in _CONTEXT_NAMES.items():
-        ctrl = controllers.get(key)
-        if ctrl is not None:
-            ctx.setContextProperty(name, ctrl)  # pyrefly: ignore [missing-argument]
-    engine.load(QUrl.fromLocalFile(str(_MAIN_QML)))  # pyrefly: ignore [missing-argument]
-    return engine
+    return MainWindow(theme, controllers, parent)
 
 
 def create_app(
     argv: list[str], controllers: Controllers | None = None
-) -> tuple[QGuiApplication, QQmlApplicationEngine, ThemeController]:
+) -> tuple[QApplication, MainWindow, ThemeManager]:
     """构造完整 GUI 应用（可测函数，拆离事件循环）。
 
     Args:
-        argv: 命令行参数（透传 QGuiApplication）
+        argv: 命令行参数（透传 QApplication）
         controllers: 页面控制器装配表（None 时新建）
 
     Returns:
-        (应用实例, QML 引擎, 主题控制器) 三元组
+        (应用实例, 主窗口, 主题管理器) 三元组
     """
-    app = QGuiApplication.instance() or QGuiApplication(argv)
-    _setup_frozen_paths()
+    app = QApplication.instance() or QApplication(argv)
+    app.setStyle("Fusion")
     apply_global_font(app)
-    register_qml_types()
-    theme = ThemeController()
-    engine = create_engine(theme, controllers)
-    return app, engine, theme
+    theme = ThemeManager()
+    apply_theme(app, theme)
+    theme.theme_changed.connect(lambda: apply_theme(app, theme))  # pyrefly: ignore [missing-attribute]
+    window = create_main_window(theme, controllers or create_controllers())
+    return app, window, theme
 
 
 def main() -> int:  # pragma: no cover
     """启动 GUI 应用（事件循环阻塞，需图形环境手动测试）。"""
-    app, engine, _theme = create_app(sys.argv)
-    if not engine.rootObjects():
-        return 1
+    app, window, _theme = create_app(sys.argv)
+    window.show()
     return app.exec_()
-
-
-if __name__ == "__main__":  # pragma: no cover
-    sys.exit(main())

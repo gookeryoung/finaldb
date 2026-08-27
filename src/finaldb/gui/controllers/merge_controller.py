@@ -1,14 +1,14 @@
-"""合并控制器：桥接 core 合并服务与 QML 合并去重页。
+"""合并控制器：桥接 core 合并服务与 Widgets 合并去重页。
 
 职责：表/列加载、union/dedup/join 三种合并模式的后台调度。
-QML 侧多值（表列表、键列列表）用单元分隔符拼接的字符串传递。
+界面侧多值（表列表、键列列表）用单元分隔符拼接的字符串传递。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide2.QtCore import Property, QObject, QThread, Signal, Slot
+from PySide2.QtCore import QObject, QThread, Signal
 
 from finaldb.core.merge import JoinSpec, MergeJob
 from finaldb.core.storage.database import column_infos, connect, table_infos
@@ -23,7 +23,7 @@ _UNIT_SEP = "\x1f"
 
 
 class MergeController(QObject):
-    """合并去重页控制器（QML 绑定 ``MergeCtrl``）。."""
+    """合并去重页控制器。."""
 
     busy_changed = Signal()
     applied = Signal(str)
@@ -41,37 +41,30 @@ class MergeController(QObject):
         self._thread: QThread | None = None
         self._worker: MergeWorker | None = None
 
-    # ----------------------------- 属性 -----------------------------
+    # ----------------------------- 只读访问 -----------------------------
 
-    @Property(QObject, notify=busy_changed)  # pyrefly: ignore [not-callable]
-    def tablesModel(self) -> TableListModel:
+    def tables_model(self) -> TableListModel:
         """表列表模型。."""
         return self._tables_model
 
-    @Property(QObject, notify=busy_changed)  # pyrefly: ignore [not-callable]
-    def dedupColumnsModel(self) -> StringListModel:
+    def dedup_columns_model(self) -> StringListModel:
         """去重页键列候选模型。."""
         return self._dedup_columns_model
 
-    @Property(QObject, notify=busy_changed)  # pyrefly: ignore [not-callable]
-    def leftColumnsModel(self) -> StringListModel:
+    def left_columns_model(self) -> StringListModel:
         """连接页左表键列候选模型。."""
         return self._left_columns_model
 
-    @Property(QObject, notify=busy_changed)  # pyrefly: ignore [not-callable]
-    def rightColumnsModel(self) -> StringListModel:
+    def right_columns_model(self) -> StringListModel:
         """连接页右表键列候选模型。."""
         return self._right_columns_model
 
-    def _get_busy(self) -> bool:
+    def is_busy(self) -> bool:
         """是否正在执行后台合并。."""
         return self._busy
 
-    busy = Property(bool, _get_busy, notify=busy_changed)
+    # ----------------------------- 操作 -----------------------------
 
-    # ----------------------------- 槽 -----------------------------
-
-    @Slot(str)  # pyrefly: ignore [not-callable]
     def load_tables(self, workspace_path: str) -> None:
         """加载工作区的表列表。."""
         if not workspace_path:
@@ -84,18 +77,15 @@ class MergeController(QObject):
             conn.close()
         self._tables_model.reload([(t.name, t.row_count) for t in infos])
 
-    @Slot(str, str)  # pyrefly: ignore [not-callable]
     def load_columns(self, workspace_path: str, table: str) -> None:
         """加载去重页指定表的列名。."""
         self._dedup_columns_model.reload(self._columns_of(workspace_path, table))
 
-    @Slot(str, str, str)  # pyrefly: ignore [not-callable]
     def load_join_columns(self, workspace_path: str, left: str, right: str) -> None:
         """加载连接页左右表的列名。."""
         self._left_columns_model.reload(self._columns_of(workspace_path, left))
         self._right_columns_model.reload(self._columns_of(workspace_path, right))
 
-    @Slot(str, str, str)  # pyrefly: ignore [not-callable]
     def apply_union(self, workspace_path: str, tables_joined: str, target: str) -> None:
         """后台纵向合并多表。."""
         tables = [t for t in tables_joined.split(_UNIT_SEP) if t]
@@ -106,7 +96,6 @@ class MergeController(QObject):
             )
         )
 
-    @Slot(str, str, str, str)  # pyrefly: ignore [not-callable]
     def apply_dedup(self, workspace_path: str, table: str, keys_joined: str, target: str) -> None:
         """后台表去重（keys 为空 = 全行去重）。"""
         keys = [k for k in keys_joined.split(_UNIT_SEP) if k]
@@ -117,7 +106,6 @@ class MergeController(QObject):
             )
         )
 
-    @Slot(str, str)  # pyrefly: ignore [not-callable]
     def apply_join(self, workspace_path: str, params_joined: str) -> None:
         """后台两表按键连接。
 

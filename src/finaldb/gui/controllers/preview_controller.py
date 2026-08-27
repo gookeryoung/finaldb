@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide2.QtCore import Property, QObject, Signal, Slot
+from PySide2.QtCore import QObject, Signal
 
 from finaldb.core.storage.database import fetch_preview
 from finaldb.gui.models.table_model import TablePreviewModel
@@ -16,7 +16,7 @@ _PREVIEW_LIMIT = 200
 
 
 class PreviewController(QObject):
-    """表数据预览控制器（QML 绑定 ``PreviewCtrl.model``）。."""
+    """表数据预览控制器（首页预览表格使用）。."""
 
     table_changed = Signal()
 
@@ -26,19 +26,18 @@ class PreviewController(QObject):
         self._model = TablePreviewModel(self)
         self._table_name = ""
 
-    # 模型对象恒定：notify 仅满足 QML 绑定要求，重读返回同一引用
-    @Property(QObject, notify=table_changed)  # pyrefly: ignore [not-callable]
-    def model(self) -> TablePreviewModel:
+    # ----------------------------- 只读访问 -----------------------------
+
+    def preview_model(self) -> TablePreviewModel:
         """预览表格模型。."""
         return self._model
 
-    def _get_table_name(self) -> str:
+    def table_name(self) -> str:
         """当前预览的表名（空串表示未加载）。."""
         return self._table_name
 
-    tableName = Property(str, _get_table_name, notify=table_changed)
+    # ----------------------------- 操作 -----------------------------
 
-    @Slot(str, str)  # pyrefly: ignore [not-callable]
     def load_table(self, workspace_path: str, table: str) -> None:
         """加载工作区指定表的前 200 行。
 
@@ -56,7 +55,6 @@ class PreviewController(QObject):
         self._table_name = table
         self.table_changed.emit()  # pyrefly: ignore [missing-attribute]
 
-    @Slot()  # pyrefly: ignore [not-callable]
     def clear(self) -> None:
         """清空预览。"""
         self._model.reset_data([], [])

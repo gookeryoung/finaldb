@@ -82,40 +82,40 @@ def _rows_of(ws: Path, table: str) -> list[tuple[object, ...]]:
 def test_load_tables(merge_setup: tuple[MergeController, Path]) -> None:
     """load_tables 加载表列表。."""
     ctrl, _ws = merge_setup
-    assert ctrl.tablesModel.rowCount() == 2
-    assert ctrl.tablesModel.table_at(0) == "t1"
-    assert ctrl.tablesModel.table_at(1) == "t2"
+    assert ctrl.tables_model().rowCount() == 2
+    assert ctrl.tables_model().table_at(0) == "t1"
+    assert ctrl.tables_model().table_at(1) == "t2"
 
 
 def test_load_tables_empty_path(merge_setup: tuple[MergeController, Path]) -> None:
     """空路径清空表列表。"""
     ctrl, _ws = merge_setup
     ctrl.load_tables("")
-    assert ctrl.tablesModel.rowCount() == 0
+    assert ctrl.tables_model().rowCount() == 0
 
 
 def test_load_columns(merge_setup: tuple[MergeController, Path]) -> None:
     """load_columns 加载去重键候选列。."""
     ctrl, ws = merge_setup
     ctrl.load_columns(str(ws), "t1")
-    assert ctrl.dedupColumnsModel.rowCount() == 2
-    assert ctrl.dedupColumnsModel.item_at(0) == "name"
+    assert ctrl.dedup_columns_model().rowCount() == 2
+    assert ctrl.dedup_columns_model().item_at(0) == "name"
     # 空参数清空
     ctrl.load_columns("", "")
-    assert ctrl.dedupColumnsModel.rowCount() == 0
+    assert ctrl.dedup_columns_model().rowCount() == 0
 
 
 def test_load_join_columns(merge_setup: tuple[MergeController, Path]) -> None:
     """load_join_columns 分别加载左右表列。."""
     ctrl, ws = merge_setup
     ctrl.load_join_columns(str(ws), "t1", "t2")
-    assert ctrl.leftColumnsModel.item_at(0) == "name"
-    assert ctrl.leftColumnsModel.item_at(1) == "age"
-    assert ctrl.rightColumnsModel.item_at(0) == "name"
-    assert ctrl.rightColumnsModel.item_at(1) == "city"
+    assert ctrl.left_columns_model().item_at(0) == "name"
+    assert ctrl.left_columns_model().item_at(1) == "age"
+    assert ctrl.right_columns_model().item_at(0) == "name"
+    assert ctrl.right_columns_model().item_at(1) == "city"
     # 空右表清空右模型
     ctrl.load_join_columns(str(ws), "t1", "")
-    assert ctrl.rightColumnsModel.rowCount() == 0
+    assert ctrl.right_columns_model().rowCount() == 0
 
 
 def test_apply_union_sync(merge_setup: tuple[MergeController, Path], qapp: QGuiApplication) -> None:
@@ -197,7 +197,7 @@ def test_apply_failure_emits_failed(merge_setup: tuple[MergeController, Path], q
 def test_busy_property_default(qapp: QGuiApplication) -> None:
     """busy 属性默认 False。."""
     ctrl = MergeController()
-    assert ctrl.busy is False
+    assert ctrl.is_busy() is False
 
 
 def test_apply_union_async_thread(merge_setup: tuple[MergeController, Path], qapp: QGuiApplication) -> None:
@@ -205,12 +205,12 @@ def test_apply_union_async_thread(merge_setup: tuple[MergeController, Path], qap
     ctrl, ws = merge_setup
     signals = _connect_signals(ctrl)
     ctrl.apply_union(str(ws), "t1\x1ft2", "async_merged")
-    assert ctrl.busy is True
+    assert ctrl.is_busy() is True
     deadline = time.monotonic() + 5.0
-    while ctrl.busy and time.monotonic() < deadline:
+    while ctrl.is_busy() and time.monotonic() < deadline:
         qapp.processEvents()
         time.sleep(0.02)
-    assert not ctrl.busy
+    assert not ctrl.is_busy()
     assert signals and signals[0][0] == "applied"
     assert "async_merged" in signals[0][1]
     assert len(_rows_of(ws, "async_merged")) == 7

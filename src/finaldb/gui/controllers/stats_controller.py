@@ -1,11 +1,11 @@
-"""统计控制器：桥接 core 表元数据与 QML 统计页。."""
+"""统计控制器：桥接 core 表元数据与 Widgets 统计页。."""
 
 from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
 
-from PySide2.QtCore import Property, QObject, Signal, Slot
+from PySide2.QtCore import QObject, Signal
 
 from finaldb.core.storage.database import connect, table_infos
 from finaldb.gui.models.stats_model import TableStatModel
@@ -17,7 +17,7 @@ _EMPTY_SUMMARY = "未选择工作区（请先在数据源页选择）"
 
 
 class StatsController(QObject):
-    """统计页控制器（QML 绑定 ``StatsCtrl``）。."""
+    """统计页控制器。."""
 
     stats_changed = Signal()
 
@@ -27,22 +27,18 @@ class StatsController(QObject):
         self._model = TableStatModel(self)
         self._summary = _EMPTY_SUMMARY
 
-    # ----------------------------- 属性 -----------------------------
+    # ----------------------------- 只读访问 -----------------------------
 
-    @Property(QObject, notify=stats_changed)  # pyrefly: ignore [not-callable]
-    def statsModel(self) -> TableStatModel:
+    def stats_model(self) -> TableStatModel:
         """表统计列表模型。."""
         return self._model
 
-    def _get_summary(self) -> str:
+    def summary_text(self) -> str:
         """统计摘要文本。."""
         return self._summary
 
-    summaryText = Property(str, _get_summary, notify=stats_changed)
+    # ----------------------------- 操作 -----------------------------
 
-    # ----------------------------- 槽 -----------------------------
-
-    @Slot(str)  # pyrefly: ignore [not-callable]
     def load_stats(self, workspace_path: str) -> None:
         """加载工作区全部表的统计（表数、行数、列数）。."""
         if not workspace_path:

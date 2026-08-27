@@ -1,7 +1,7 @@
-"""工作区控制器：桥接 core 工作区服务与 QML 界面。
+"""工作区控制器：桥接 core 工作区服务与 Widgets 界面。
 
 职责：工作区增删查、当前工作区选择、数据导入调度（QThread Worker）。
-界面只连接本控制器的信号与槽，不直接触碰 core。
+界面只连接本控制器的信号与调用其方法，不直接触碰 core。
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from PySide2.QtCore import Property, QObject, QThread, Signal, Slot
+from PySide2.QtCore import QObject, QThread, Signal
 
 from finaldb.core.exceptions import WorkspaceError
 from finaldb.core.storage.database import table_infos
@@ -46,45 +46,34 @@ class WorkspaceController(QObject):
         self._worker: ImportWorker | None = None
         self.refresh()
 
-    # ----------------------------- 属性 -----------------------------
+    # ----------------------------- 只读访问 -----------------------------
 
-    def _workspace_root(self) -> str:
-        """工作区根目录（CONSTANT）。."""
+    def workspace_root(self) -> str:
+        """工作区根目录。."""
         return str(self._manager.root)
 
-    workspaceRoot = Property(str, _workspace_root, constant=True)
-
-    def _get_current_name(self) -> str:
+    def current_workspace(self) -> str:
         """当前工作区名（未选择为空串）。."""
         return self._current.name if self._current else ""
 
-    def _get_current_path(self) -> str:
+    def current_workspace_path(self) -> str:
         """当前工作区目录（未选择为空串）。."""
         return str(self._current.path) if self._current else ""
 
-    currentWorkspace = Property(str, _get_current_name, notify=current_changed)
-    currentWorkspacePath = Property(str, _get_current_path, notify=current_changed)
-
-    def _get_busy(self) -> bool:
+    def is_busy(self) -> bool:
         """是否正在执行后台任务。."""
         return self._busy
 
-    busy = Property(bool, _get_busy, notify=busy_changed)
-
-    # 模型对象恒定：notify 仅满足 QML 绑定要求，重读返回同一引用
-    @Property(QObject, notify=workspaces_changed)  # pyrefly: ignore [not-callable]
-    def model(self) -> WorkspaceListModel:
+    def workspace_model(self) -> WorkspaceListModel:
         """工作区列表模型。."""
         return self._model
 
-    @Property(QObject, notify=current_changed)  # pyrefly: ignore [not-callable]
-    def tableModel(self) -> TableListModel:
+    def table_model(self) -> TableListModel:
         """当前工作区表列表模型。."""
         return self._table_model
 
-    # ----------------------------- 槽 -----------------------------
+    # ----------------------------- 操作 -----------------------------
 
-    @Slot()  # pyrefly: ignore [not-callable]
     def refresh(self) -> None:
         """刷新工作区列表（保持当前选择有效）。"""
         self._model.reload(self._manager.list())
@@ -94,7 +83,6 @@ class WorkspaceController(QObject):
             self.current_changed.emit()  # pyrefly: ignore [missing-attribute]
         self.workspaces_changed.emit()  # pyrefly: ignore [missing-attribute]
 
-    @Slot(str)  # pyrefly: ignore [not-callable]
     def create_workspace(self, name: str) -> None:
         """创建工作区并选中。"""
         try:
@@ -107,7 +95,6 @@ class WorkspaceController(QObject):
         self.refresh()
         self.current_changed.emit()  # pyrefly: ignore [missing-attribute]
 
-    @Slot(str)  # pyrefly: ignore [not-callable]
     def select_workspace(self, name: str) -> None:
         """按名称选择当前工作区。."""
         for meta in self._manager.list():
@@ -118,7 +105,6 @@ class WorkspaceController(QObject):
                 return
         self.error_raised.emit(f"工作区不存在: {name}")  # pyrefly: ignore [missing-attribute]
 
-    @Slot(str)  # pyrefly: ignore [not-callable]
     def delete_workspace(self, name: str) -> None:
         """删除工作区（若为当前工作区则清空选择）。"""
         for meta in self._manager.list():
@@ -136,7 +122,6 @@ class WorkspaceController(QObject):
                 return
         self.error_raised.emit(f"工作区不存在: {name}")  # pyrefly: ignore [missing-attribute]
 
-    @Slot(str)  # pyrefly: ignore [not-callable]
     def import_file(self, url_or_path: str) -> None:
         """后台导入数据文件到当前工作区（file:/// URL 或本地路径）。"""
         if self._current is None:
@@ -217,7 +202,7 @@ class WorkspaceController(QObject):
 
 
 def _to_local_path(url_or_path: str) -> str:
-    """把 QML FileDialog 的 file:/// URL 转为本地路径。
+    """把文件 URL 或本地路径统一为本地路径。
 
     :param url_or_path: URL 或本地路径字符串
     :return: 本地路径（无法解析返回空串）

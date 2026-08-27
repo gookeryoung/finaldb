@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from finaldb.gui.theme import ThemeController, detect_font_families
+from finaldb.gui.theme import ThemeManager, build_qss, detect_font_families
 
-__all__ = ["ThemeController", "detect_font_families"]
+__all__ = ["ThemeManager", "build_qss", "detect_font_families"]

@@ -35,19 +35,19 @@ def _csv(tmp_path: Path) -> Path:
 
 def test_initial_state(ctrl: WorkspaceController) -> None:
     """初始无工作区、无当前选择、不忙。."""
-    assert ctrl.model.rowCount() == 0
-    assert ctrl.currentWorkspace == ""
-    assert ctrl.currentWorkspacePath == ""
-    assert ctrl.busy is False
-    assert ctrl.tableModel.rowCount() == 0
+    assert ctrl.workspace_model().rowCount() == 0
+    assert ctrl.current_workspace() == ""
+    assert ctrl.current_workspace_path() == ""
+    assert ctrl.is_busy() is False
+    assert ctrl.table_model().rowCount() == 0
 
 
 def test_create_workspace_selects_it(ctrl: WorkspaceController) -> None:
     """创建工作区后自动选中并刷新列表。."""
     ctrl.create_workspace("alpha")
-    assert ctrl.currentWorkspace == "alpha"
-    assert ctrl.model.rowCount() == 1
-    assert (Path(ctrl.currentWorkspacePath) / "data.db").is_file()
+    assert ctrl.current_workspace() == "alpha"
+    assert ctrl.workspace_model().rowCount() == 1
+    assert (Path(ctrl.current_workspace_path()) / "data.db").is_file()
 
 
 def test_create_invalid_name_emits_error(ctrl: WorkspaceController) -> None:
@@ -56,7 +56,7 @@ def test_create_invalid_name_emits_error(ctrl: WorkspaceController) -> None:
     ctrl.error_raised.connect(errors.append)  # pyrefly: ignore [missing-attribute]
     ctrl.create_workspace("中文!!")
     assert errors and "无效" in errors[0]
-    assert ctrl.model.rowCount() == 0
+    assert ctrl.workspace_model().rowCount() == 0
 
 
 def test_select_and_delete_workspace(ctrl: WorkspaceController) -> None:
@@ -64,10 +64,10 @@ def test_select_and_delete_workspace(ctrl: WorkspaceController) -> None:
     ctrl.create_workspace("alpha")
     ctrl.create_workspace("beta")
     ctrl.select_workspace("alpha")
-    assert ctrl.currentWorkspace == "alpha"
+    assert ctrl.current_workspace() == "alpha"
     ctrl.delete_workspace("alpha")
-    assert ctrl.currentWorkspace == ""
-    assert ctrl.model.rowCount() == 1
+    assert ctrl.current_workspace() == ""
+    assert ctrl.workspace_model().rowCount() == 1
 
 
 def test_delete_missing_workspace_emits_error(ctrl: WorkspaceController) -> None:
@@ -93,8 +93,8 @@ def test_import_file_sync_updates_tables(ctrl: WorkspaceController, tmp_path: Pa
     ctrl.import_finished.connect(messages.append)  # pyrefly: ignore [missing-attribute]
     ctrl.import_file_sync(str(_csv(tmp_path)))
     assert messages and "demo(2 行)" in messages[0]
-    assert ctrl.tableModel.rowCount() == 1
-    assert ctrl.tableModel.table_at(0) == "demo"
+    assert ctrl.table_model().rowCount() == 1
+    assert ctrl.table_model().table_at(0) == "demo"
 
 
 def test_import_without_workspace_emits_error(ctrl: WorkspaceController, tmp_path: Path) -> None:
@@ -122,7 +122,7 @@ def test_import_file_async_thread(qapp: object, ctrl: WorkspaceController, tmp_p
     messages: list[str] = []
     ctrl.import_finished.connect(messages.append)  # pyrefly: ignore [missing-attribute]
     ctrl.import_file(str(_csv(tmp_path)))
-    assert ctrl.busy is True
+    assert ctrl.is_busy() is True
     deadline = time.monotonic() + 10.0
     while not messages and time.monotonic() < deadline:
         QGuiApplication.processEvents()
@@ -131,11 +131,11 @@ def test_import_file_async_thread(qapp: object, ctrl: WorkspaceController, tmp_p
     assert "demo(2 行)" in messages[0]
     # 线程退出后忙状态复位
     deadline = time.monotonic() + 5.0
-    while ctrl.busy and time.monotonic() < deadline:
+    while ctrl.is_busy() and time.monotonic() < deadline:
         QGuiApplication.processEvents()
         time.sleep(0.02)
-    assert ctrl.busy is False
-    assert ctrl.tableModel.rowCount() == 1
+    assert ctrl.is_busy() is False
+    assert ctrl.table_model().rowCount() == 1
 
 
 def test_import_async_without_workspace(qapp: object, ctrl: WorkspaceController) -> None:
@@ -194,16 +194,16 @@ def test_preview_controller_load_and_clear(ctrl: WorkspaceController, tmp_path: 
     ctrl.create_workspace("alpha")
     ctrl.import_file_sync(str(_csv(tmp_path)))
     preview = PreviewController()
-    preview.load_table(ctrl.currentWorkspacePath, "demo")
-    assert preview.tableName == "demo"
-    assert preview.model.rowCount() == 2
-    assert preview.model.columnCount() == 2
-    idx = preview.model.index(0, 1)
-    assert preview.model.data(idx, Qt.DisplayRole) == "x"
-    assert preview.model.headerData(0, Qt.Horizontal, Qt.DisplayRole) == "a"
+    preview.load_table(ctrl.current_workspace_path(), "demo")
+    assert preview.table_name() == "demo"
+    assert preview.preview_model().rowCount() == 2
+    assert preview.preview_model().columnCount() == 2
+    idx = preview.preview_model().index(0, 1)
+    assert preview.preview_model().data(idx, Qt.DisplayRole) == "x"
+    assert preview.preview_model().headerData(0, Qt.Horizontal, Qt.DisplayRole) == "a"
     preview.clear()
-    assert preview.tableName == ""
-    assert preview.model.rowCount() == 0
+    assert preview.table_name() == ""
+    assert preview.preview_model().rowCount() == 0
 
 
 def test_workspace_model_data_roles(ctrl: WorkspaceController) -> None:
@@ -212,21 +212,21 @@ def test_workspace_model_data_roles(ctrl: WorkspaceController) -> None:
     from finaldb.core.workspace import WorkspaceMeta
 
     metas = [WorkspaceMeta("beta", Path("/tmp/beta"), 3, 30, 1700000000.0)]
-    ctrl.model.reload(metas)
-    assert ctrl.model.rowCount() == 1
-    idx = ctrl.model.index(0, 0)
-    assert ctrl.model.data(idx, Qt.UserRole + 1) == "beta"
-    assert ctrl.model.data(idx, Qt.UserRole + 2) == 3
-    assert ctrl.model.data(idx, Qt.UserRole + 3) == 30
-    assert ctrl.model.data(idx, Qt.UserRole + 4) == format_timestamp(1700000000.0)
-    assert ctrl.model.data(idx, Qt.UserRole + 5) == str(Path("/tmp/beta"))
+    ctrl.workspace_model().reload(metas)
+    assert ctrl.workspace_model().rowCount() == 1
+    idx = ctrl.workspace_model().index(0, 0)
+    assert ctrl.workspace_model().data(idx, Qt.UserRole + 1) == "beta"
+    assert ctrl.workspace_model().data(idx, Qt.UserRole + 2) == 3
+    assert ctrl.workspace_model().data(idx, Qt.UserRole + 3) == 30
+    assert ctrl.workspace_model().data(idx, Qt.UserRole + 4) == format_timestamp(1700000000.0)
+    assert ctrl.workspace_model().data(idx, Qt.UserRole + 5) == str(Path("/tmp/beta"))
     # 越界与无效角色返回 None
-    assert ctrl.model.data(ctrl.model.index(5, 0), Qt.UserRole + 1) is None
-    assert ctrl.model.data(idx, Qt.DisplayRole) is None
-    assert ctrl.model.meta_at(0) is metas[0]
-    assert ctrl.model.meta_at(9) is None
-    ctrl.model.clear()
-    assert ctrl.model.rowCount() == 0
+    assert ctrl.workspace_model().data(ctrl.workspace_model().index(5, 0), Qt.UserRole + 1) is None
+    assert ctrl.workspace_model().data(idx, Qt.DisplayRole) is None
+    assert ctrl.workspace_model().meta_at(0) is metas[0]
+    assert ctrl.workspace_model().meta_at(9) is None
+    ctrl.workspace_model().clear()
+    assert ctrl.workspace_model().rowCount() == 0
 
 
 def test_table_preview_model_edges(qapp: object) -> None:

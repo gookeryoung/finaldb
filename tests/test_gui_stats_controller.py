@@ -32,12 +32,12 @@ def test_load_stats(stats_setup: tuple[StatsController, Path]) -> None:
     """load_stats 加载表分布与摘要。."""
     ctrl, ws = stats_setup
     ctrl.load_stats(str(ws))
-    model = ctrl.statsModel
+    model = ctrl.stats_model()
     assert model.rowCount() == 2
     first = model.stat_at(0)
     assert first is not None and first.name == "t1"
     assert first.row_count == 3
-    assert ctrl.summaryText == "共 2 张表，4 行数据"
+    assert ctrl.summary_text() == "共 2 张表，4 行数据"
 
 
 def test_load_stats_ratio_role(stats_setup: tuple[StatsController, Path]) -> None:
@@ -46,7 +46,7 @@ def test_load_stats_ratio_role(stats_setup: tuple[StatsController, Path]) -> Non
 
     ctrl, ws = stats_setup
     ctrl.load_stats(str(ws))
-    model = ctrl.statsModel
+    model = ctrl.stats_model()
     assert model.max_rows() == 3
     ratio_t1 = model.data(model.index(0, 0), Qt.UserRole + 5)
     ratio_t2 = model.data(model.index(1, 0), Qt.UserRole + 5)
@@ -58,8 +58,8 @@ def test_load_stats_empty_path(stats_setup: tuple[StatsController, Path]) -> Non
     """空路径清空模型并提示未选工作区。."""
     ctrl, _ws = stats_setup
     ctrl.load_stats("")
-    assert ctrl.statsModel.rowCount() == 0
-    assert "未选择工作区" in str(ctrl.summaryText)
+    assert ctrl.stats_model().rowCount() == 0
+    assert "未选择工作区" in str(ctrl.summary_text())
 
 
 def test_load_stats_no_db(stats_setup: tuple[StatsController, Path], tmp_path: Path) -> None:
@@ -68,16 +68,16 @@ def test_load_stats_no_db(stats_setup: tuple[StatsController, Path], tmp_path: P
     empty = tmp_path / "empty"
     empty.mkdir()
     ctrl.load_stats(str(empty))
-    assert ctrl.statsModel.rowCount() == 0
-    assert "暂无数据" in str(ctrl.summaryText)
+    assert ctrl.stats_model().rowCount() == 0
+    assert "暂无数据" in str(ctrl.summary_text())
 
 
 def test_stat_at_out_of_range(stats_setup: tuple[StatsController, Path]) -> None:
     """stat_at 越界返回 None。."""
     ctrl, ws = stats_setup
     ctrl.load_stats(str(ws))
-    assert ctrl.statsModel.stat_at(5) is None
-    assert ctrl.statsModel.stat_at(-1) is None
+    assert ctrl.stats_model().stat_at(5) is None
+    assert ctrl.stats_model().stat_at(-1) is None
 
 
 def test_display_role(stats_setup: tuple[StatsController, Path]) -> None:
@@ -86,5 +86,5 @@ def test_display_role(stats_setup: tuple[StatsController, Path]) -> None:
 
     ctrl, ws = stats_setup
     ctrl.load_stats(str(ws))
-    display = ctrl.statsModel.data(ctrl.statsModel.index(0, 0), Qt.UserRole + 4)
+    display = ctrl.stats_model().data(ctrl.stats_model().index(0, 0), Qt.UserRole + 4)
     assert display == "t1（1 列 / 3 行）"

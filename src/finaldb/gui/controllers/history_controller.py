@@ -1,4 +1,4 @@
-"""历史控制器：桥接 core 版本控制服务与 QML 版本历史页。
+"""历史控制器：桥接 core 版本控制服务与 Widgets 版本历史页。
 
 职责：快照列表加载、提交/回滚/对比的后台调度与 diff 文本暴露。
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide2.QtCore import Property, QObject, QThread, Signal, Slot
+from PySide2.QtCore import QObject, QThread, Signal
 
 from finaldb.core.versioning import list_snapshots
 from finaldb.gui.models.snapshot_model import SnapshotListModel
@@ -20,7 +20,7 @@ _FAIL_PREFIX = "版本操作失败"
 
 
 class HistoryController(QObject):
-    """版本历史页控制器（QML 绑定 ``HistoryCtrl``）。."""
+    """版本历史页控制器。."""
 
     busy_changed = Signal()
     diff_changed = Signal()
@@ -38,28 +38,22 @@ class HistoryController(QObject):
         self._thread: QThread | None = None
         self._worker: HistoryWorker | None = None
 
-    # ----------------------------- 属性 -----------------------------
+    # ----------------------------- 只读访问 -----------------------------
 
-    @Property(QObject, notify=busy_changed)  # pyrefly: ignore [not-callable]
-    def snapshotsModel(self) -> SnapshotListModel:
+    def snapshots_model(self) -> SnapshotListModel:
         """快照列表模型。."""
         return self._model
 
-    def _get_diff_text(self) -> str:
+    def diff_text(self) -> str:
         """最近一次对比的 diff 文本。."""
         return self._diff_text
 
-    diffText = Property(str, _get_diff_text, notify=diff_changed)
-
-    def _get_busy(self) -> bool:
+    def is_busy(self) -> bool:
         """是否正在执行后台版本操作。."""
         return self._busy
 
-    busy = Property(bool, _get_busy, notify=busy_changed)
+    # ----------------------------- 操作 -----------------------------
 
-    # ----------------------------- 槽 -----------------------------
-
-    @Slot(str)  # pyrefly: ignore [not-callable]
     def load_history(self, workspace_path: str) -> None:
         """加载工作区快照列表。."""
         if not workspace_path:
@@ -67,12 +61,10 @@ class HistoryController(QObject):
             return
         self._model.reload(list_snapshots(Path(workspace_path)))
 
-    @Slot(str, str)  # pyrefly: ignore [not-callable]
     def commit(self, workspace_path: str, message: str) -> None:
         """后台提交当前数据为快照。"""
         self._start(HistoryWorker(workspace_path, HistoryJob("commit", message=message)))
 
-    @Slot(str, str)  # pyrefly: ignore [not-callable]
     def restore(self, workspace_path: str, ref: str) -> None:
         """后台回滚到指定快照。"""
         if not ref:
@@ -80,9 +72,8 @@ class HistoryController(QObject):
             return
         self._start(HistoryWorker(workspace_path, HistoryJob("restore", ref=ref)))
 
-    @Slot(str, str, str)  # pyrefly: ignore [not-callable]
     def diff(self, workspace_path: str, ref_old: str, ref_new: str) -> None:
-        """后台对比两快照并更新 diffText。"""
+        """后台对比两快照并更新 diff 文本。"""
         if not ref_old or not ref_new:
             self.error_raised.emit("请先选择两个快照进行对比")  # pyrefly: ignore [missing-attribute]
             return
@@ -153,7 +144,7 @@ class HistoryController(QObject):
             self.diff_changed.emit()  # pyrefly: ignore [missing-attribute]
 
     def _set_busy(self, value: bool) -> None:
-        """更新忙状态。."""
+        """更新忙状态。"""
         if self._busy != value:
             self._busy = value
             self.busy_changed.emit()  # pyrefly: ignore [missing-attribute]
