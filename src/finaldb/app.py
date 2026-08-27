@@ -12,6 +12,7 @@ from PySide2.QtGui import QFont, QGuiApplication
 from PySide2.QtWidgets import QApplication, QMainWindow
 
 from finaldb.app_controllers import Controllers, create_controllers
+from finaldb.gui.settings import load_theme_settings, save_theme_settings
 from finaldb.gui.theme import ThemeManager, build_qss, detect_font_families
 from finaldb.gui.widgets.main_window import MainWindow
 
@@ -64,10 +65,20 @@ def create_app(
     app.setStyle("Fusion")
     apply_global_font(app)
     theme = ThemeManager()
+    # 启动恢复持久化的界面设置（暗色模式/基准字号）
+    dark, font_size = load_theme_settings()
+    theme.set_dark(dark)
+    theme.set_base_font_size(font_size)
     apply_theme(app, theme)
-    theme.theme_changed.connect(lambda: apply_theme(app, theme))  # pyrefly: ignore [missing-attribute]
+    theme.theme_changed.connect(lambda: _sync_theme(app, theme))  # pyrefly: ignore [missing-attribute]
     window = create_main_window(theme, controllers or create_controllers())
     return app, window, theme
+
+
+def _sync_theme(app: QApplication, theme: ThemeManager) -> None:
+    """主题变化：重建 QSS 并持久化设置。."""
+    apply_theme(app, theme)
+    save_theme_settings(theme.is_dark(), theme.font_size_body())
 
 
 def main() -> int:  # pragma: no cover

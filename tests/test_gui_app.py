@@ -1,10 +1,22 @@
-"""app.py 入口装配测试：字体、主题应用与主窗口构造。."""
+"""app.py 入口装配测试：字体、主题应用、设置持久化与主窗口构造。."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 
+from finaldb.gui.settings import clear_theme_settings
+
 pytestmark = pytest.mark.gui
+
+
+@pytest.fixture(autouse=True)
+def _clean_settings() -> Iterator[None]:
+    """每个用例前后清空持久化设置（create_app 会恢复/保存主题状态）。."""
+    clear_theme_settings()
+    yield
+    clear_theme_settings()
 
 
 def test_apply_global_font(qapp: object) -> None:
@@ -59,3 +71,22 @@ def test_create_app_theme_change_rebuilds_qss(qapp: object) -> None:
     app, _window, theme = create_app([])
     theme.set_dark(True)
     assert "#7AA2F7" in app.styleSheet()
+
+
+def test_create_app_persists_and_restores_theme(qapp: object) -> None:
+    """create_app 主题变化即持久化，重启（再次 create_app）恢复设置。."""
+    from finaldb.app import create_app
+    from finaldb.gui.settings import load_theme_settings
+
+    # 首次启动：切换暗色并调字号 → 即时落盘
+    app, _window, theme = create_app([])
+    theme.set_dark(True)
+    theme.set_base_font_size(17)
+    assert load_theme_settings() == (True, 17)
+    assert "#7AA2F7" in app.styleSheet()
+
+    # 模拟重启：新应用实例恢复持久化的设置
+    app2, _window2, theme2 = create_app([])
+    assert theme2.is_dark() is True
+    assert theme2.font_size_body() == 17
+    assert "#7AA2F7" in app2.styleSheet()
