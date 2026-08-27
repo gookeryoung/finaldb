@@ -1,4 +1,8 @@
-"""数据整理页：表/列选择 + 清洗规则配置 + 预览与统计 + 应用到新表。."""
+"""数据清洗面板：表/列选择 + 清洗规则配置 + 预览与统计 + 应用到新表。
+
+作为数据页的嵌入面板：无页标题与工作区提示（由数据页统一提供），
+表数据源跟随数据页当前工作区。
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,7 @@ from PySide2.QtGui import QShowEvent
 from PySide2.QtWidgets import (
     QComboBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -20,10 +25,10 @@ from PySide2.QtWidgets import (
 from finaldb.gui.controllers.clean_controller import CleanController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
-from finaldb.gui.widgets.common import busy_bar, caption_label, card, page_title, workspace_hint
+from finaldb.gui.widgets.common import busy_bar, caption_label, card
 from finaldb.gui.widgets.toast import Toast
 
-__all__ = ["CleanPage"]
+__all__ = ["CleanPane"]
 
 # 规则类型下拉：标签与控制器取值一一对应（case 复用两个标签区分大小写）
 _KIND_LABELS = ["去首尾空白", "转大写", "转小写", "文本替换", "文本转数值", "缺失值填充", "删除缺失行"]
@@ -58,8 +63,8 @@ class _RuleRow(QWidget):
         layout.addWidget(remove_btn)
 
 
-class CleanPage(QWidget):
-    """数据整理页：两栏布局（规则配置 | 预览与统计）。."""
+class CleanPane(QWidget):
+    """数据清洗面板：两栏布局（规则配置 | 预览与统计）。."""
 
     def __init__(
         self,
@@ -68,7 +73,7 @@ class CleanPage(QWidget):
         clean_ctrl: CleanController,
         parent: QWidget | None = None,
     ) -> None:
-        """初始化页面并装配控制器信号。
+        """初始化面板并装配控制器信号。
 
         Args:
             theme: 主题管理器
@@ -85,16 +90,15 @@ class CleanPage(QWidget):
         self._current_column = ""
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(SPACING_MD, SPACING_MD, SPACING_MD, SPACING_MD)
-        root.setSpacing(SPACING_MD)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(SPACING_SM)
 
         # ---------- 顶部工具栏 ----------
         bar = QHBoxLayout()
         bar.setSpacing(SPACING_SM)
-        bar.addWidget(page_title("数据整理"))
-        bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据页选择）"), stretch=1)
         self._busy = busy_bar()
         bar.addWidget(self._busy)
+        bar.addStretch(1)
         self._preview_btn = QPushButton("预览效果")
         self._preview_btn.setObjectName("previewBtn")
         self._preview_btn.clicked.connect(self._on_preview)
@@ -110,7 +114,7 @@ class CleanPage(QWidget):
 
         # 左：规则配置面板
         left = card()
-        left.setFixedWidth(380)
+        left.setFixedWidth(340)
         form = QVBoxLayout(left)
         form.setContentsMargins(12, 12, 12, 12)
         form.setSpacing(SPACING_SM)
@@ -200,6 +204,11 @@ class CleanPage(QWidget):
         self._preview_view.setEditTriggers(QTableView.NoEditTriggers)
         self._preview_view.setAlternatingRowColors(True)
         self._preview_view.verticalHeader().setVisible(False)
+        # 列宽随内容自适应，末列拉伸占满（表格数据对齐）
+        preview_header = self._preview_view.horizontalHeader()
+        preview_header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        preview_header.setMinimumSectionSize(72)
+        preview_header.setStretchLastSection(True)
         right_layout.addWidget(self._preview_view, stretch=1)
         self._preview_empty = QLabel("选择数据表后配置规则")
         self._preview_empty.setProperty("secondary", True)
@@ -241,7 +250,7 @@ class CleanPage(QWidget):
         self._update_actions()
 
     def showEvent(self, event: QShowEvent) -> None:
-        """页面可见时重载表列表（对齐 QML onVisibleChanged）。."""
+        """面板可见时重载表列表。."""
         super().showEvent(event)
         if self._ws.current_workspace_path():
             self._clean.load_tables(self._ws.current_workspace_path())
@@ -316,7 +325,7 @@ class CleanPage(QWidget):
             index = model.index(row, 0)
             describe = str(model.data(index, Qt.UserRole + 6) or "")
             item = QListWidgetItem()
-            item.setSizeHint(QSize(340, 34))
+            item.setSizeHint(QSize(300, 34))
             self._rule_list.addItem(item)
             rule_row = _RuleRow(describe, row, self._rule_list)
             rule_row.remove_requested.connect(self._on_remove_rule)  # pyrefly: ignore [missing-attribute]

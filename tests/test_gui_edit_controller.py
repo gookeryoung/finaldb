@@ -148,6 +148,29 @@ def test_goto_page_clamps(ctrl: tuple[EditingController, Path], tmp_path: Path) 
     assert controller.current_page() == 1
 
 
+def test_workspace_switch_closes_session(tmp_path: Path) -> None:
+    """切换工作区后关闭旧编辑会话（修复：编辑写入旧工作区导致“看似没保存”）。."""
+    controller = EditingController()
+    ws_a = tmp_path / "a"
+    ws_b = tmp_path / "b"
+    for ws in (ws_a, ws_b):
+        ws.mkdir()
+        conn = connect(ws / "data.db")
+        create_table(conn, "t", ["name"], ["TEXT"])
+        conn.close()
+    controller.load_tables(str(ws_a))
+    controller.open_table("t")
+    assert controller.current_table() == "t"
+    # 切换到工作区 B：会话关闭，后续编辑不再写入 A 的 data.db
+    controller.load_tables(str(ws_b))
+    assert controller.current_table() == ""
+    assert controller.total_rows() == 0
+    # 同一工作区重复 load_tables 不误关会话
+    controller.open_table("t")
+    controller.load_tables(str(ws_b))
+    assert controller.current_table() == "t"
+
+
 def test_table_list_reload_after_row_change(ctrl: tuple[EditingController, Path]) -> None:
     """行数变化后表列表刷新（行数徽标）。"""
     controller, _ws = ctrl

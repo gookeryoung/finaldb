@@ -1,4 +1,8 @@
-"""合并去重页：纵向合并（union）/ 表去重（dedup）/ 两表连接（join）三模式。."""
+"""合并去重面板：纵向合并（union）/ 表去重（dedup）/ 两表连接（join）三模式。
+
+作为数据页的嵌入面板：无页标题与工作区提示（由数据页统一提供），
+表数据源跟随数据页当前工作区。
+"""
 
 from __future__ import annotations
 
@@ -21,10 +25,10 @@ from PySide2.QtWidgets import (
 from finaldb.gui.controllers.merge_controller import MergeController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
-from finaldb.gui.widgets.common import busy_bar, caption_label, card, page_title, workspace_hint
+from finaldb.gui.widgets.common import busy_bar, caption_label, card
 from finaldb.gui.widgets.toast import Toast
 
-__all__ = ["MergePage"]
+__all__ = ["MergePane"]
 
 # 多值分隔符：与控制器侧约定一致（\x1f 单元分隔符）
 _UNIT_SEP = "\x1f"
@@ -43,8 +47,8 @@ _HOW_LABELS = ["内连接（仅匹配行）", "左连接（保留左表全部）
 _HOW_VALUES = ["inner", "left"]
 
 
-class MergePage(QWidget):
-    """合并去重页：两栏布局（模式配置 | 模式说明）。."""
+class MergePane(QWidget):
+    """合并去重面板：两栏布局（模式配置 | 模式说明）。."""
 
     def __init__(
         self,
@@ -53,7 +57,7 @@ class MergePage(QWidget):
         merge_ctrl: MergeController,
         parent: QWidget | None = None,
     ) -> None:
-        """初始化页面并装配控制器信号。
+        """初始化面板并装配控制器信号。
 
         Args:
             theme: 主题管理器
@@ -78,13 +82,12 @@ class MergePage(QWidget):
         self._join_how = _HOW_VALUES[0]
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(SPACING_MD, SPACING_MD, SPACING_MD, SPACING_MD)
-        root.setSpacing(SPACING_MD)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(SPACING_SM)
 
-        # ---------- 顶部工具栏：模式切换 + 工作区 + 执行 ----------
+        # ---------- 顶部工具栏：模式切换 + 执行 ----------
         bar = QHBoxLayout()
         bar.setSpacing(SPACING_SM)
-        bar.addWidget(page_title("合并去重"))
         self._mode_group = QButtonGroup(self)
         self._mode_group.setExclusive(True)
         for index, title in enumerate(_MODE_TITLES):
@@ -96,7 +99,7 @@ class MergePage(QWidget):
             self._mode_group.addButton(mode_btn, index)
             mode_btn.clicked.connect(lambda _=False, idx=index: self._on_mode_changed(idx))
             bar.addWidget(mode_btn)
-        bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据页选择）"), stretch=1)
+        bar.addStretch(1)
         self._busy = busy_bar()
         bar.addWidget(self._busy)
         self._apply_btn = QPushButton("执行")
@@ -255,7 +258,7 @@ class MergePage(QWidget):
     # ----------------------------- 状态与刷新 -----------------------------
 
     def showEvent(self, event: QShowEvent) -> None:
-        """页面可见时重载表列表（对齐 QML onVisibleChanged）。."""
+        """面板可见时重载表列表。."""
         super().showEvent(event)
         if self._ws.current_workspace_path():
             self._reload_tables()

@@ -12,11 +12,9 @@ __all__ = ["NavButton", "Sidebar"]
 # 导航项定义：(page_id, badge 字符, 标签)
 _MAIN_NAV = [
     ("data", "数", "数据"),
-    ("clean", "整", "数据整理"),
-    ("merge", "合", "合并去重"),
+    ("stats", "统", "统计"),
 ]
 _AUX_NAV = [
-    ("insights", "察", "统计与版本"),
     ("settings", "设", "设置"),
     ("about", "关", "关于"),
 ]

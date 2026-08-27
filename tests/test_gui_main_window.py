@@ -10,14 +10,14 @@ from finaldb.gui.widgets.main_window import PAGE_ORDER
 
 pytestmark = pytest.mark.gui
 
-# main_window fixture 元组：(主窗口, 主题, 工作区/预览/清洗/合并/编辑/历史/统计/关于控制器)
+# main_window fixture 元组：(主窗口, 主题, 工作区/清洗/合并/编辑/统计/关于控制器)
 WindowFixture = Tuple[Any, ...]  # noqa: UP006  # 3.8 运行时下标兼容
 
 
-def test_window_assembles_six_pages(main_window: WindowFixture) -> None:
-    """主窗口装配六页且默认停在数据页。."""
+def test_window_assembles_four_pages(main_window: WindowFixture) -> None:
+    """主窗口装配四页且默认停在数据页。."""
     window, *_rest = main_window
-    assert window.stack.count() == len(PAGE_ORDER) == 6
+    assert window.stack.count() == len(PAGE_ORDER) == 4
     assert set(window.pages) == set(PAGE_ORDER)
     assert window.current_page() == "data"
 
@@ -35,9 +35,9 @@ def test_set_current_page_roundtrip(main_window: WindowFixture) -> None:
 def test_sidebar_button_switches_page(main_window: WindowFixture) -> None:
     """点击侧边栏导航按钮触发页面切换并保持选中态（其余按钮取消选中）。."""
     window, *_rest = main_window
-    button = window.sidebar._buttons["clean"]
+    button = window.sidebar._buttons["stats"]
     button.click()
-    assert window.current_page() == "clean"
+    assert window.current_page() == "stats"
     assert button.isChecked()
     # 互斥组：旧页按钮激活态被清除，不残留
     assert not window.sidebar._buttons["data"].isChecked()

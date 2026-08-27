@@ -1,4 +1,4 @@
-"""统计控制器测试：摘要文本、表分布加载与边界路径。."""
+"""统计控制器测试：摘要文本、表分布加载、列级统计与边界路径。."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def stats_setup(qapp: object, tmp_path: Path) -> tuple[StatsController, Path]:
 
 
 def test_load_stats(stats_setup: tuple[StatsController, Path]) -> None:
-    """load_stats 加载表分布与摘要。."""
+    """load_stats 加载表分布与摘要（表数/行数/列数/体积）。."""
     ctrl, ws = stats_setup
     ctrl.load_stats(str(ws))
     model = ctrl.stats_model()
@@ -37,7 +37,8 @@ def test_load_stats(stats_setup: tuple[StatsController, Path]) -> None:
     first = model.stat_at(0)
     assert first is not None and first.name == "t1"
     assert first.row_count == 3
-    assert ctrl.summary_text() == "共 2 张表，4 行数据"
+    summary = ctrl.summary_text()
+    assert summary.startswith("共 2 张表 · 4 行 · 3 列 · ")
 
 
 def test_load_stats_ratio_role(stats_setup: tuple[StatsController, Path]) -> None:
@@ -88,3 +89,67 @@ def test_display_role(stats_setup: tuple[StatsController, Path]) -> None:
     ctrl.load_stats(str(ws))
     display = ctrl.stats_model().data(ctrl.stats_model().index(0, 0), Qt.UserRole + 4)
     assert display == "t1（1 列 / 3 行）"
+
+
+def test_table_names(stats_setup: tuple[StatsController, Path]) -> None:
+    """table_names 返回当前工作区全部表名。."""
+    ctrl, ws = stats_setup
+    ctrl.load_stats(str(ws))
+    assert ctrl.table_names() == ["t1", "t2"]
+    ctrl.load_stats("")
+    assert ctrl.table_names() == []
+
+
+def test_load_table_stats(stats_setup: tuple[StatsController, Path]) -> None:
+    """load_table_stats 加载单表列级统计画像。."""
+    ctrl, ws = stats_setup
+    ctrl.load_table_stats(str(ws), "t2")
+    model = ctrl.table_stats_model()
+    assert model.rowCount() == 2
+    city_stat = model.stat_at(0)
+    pop_stat = model.stat_at(1)
+    assert city_stat is not None and city_stat.name == "city"
+    assert city_stat.sql_type == "TEXT"
+    assert city_stat.total == 1 and city_stat.non_null == 1 and city_stat.null_count == 0
+    assert city_stat.distinct_count == 1
+    assert city_stat.minimum == "北京" and city_stat.maximum == "北京"
+    assert city_stat.mean is None  # TEXT 列不计算均值
+    assert pop_stat is not None and pop_stat.name == "pop"
+    assert pop_stat.mean == 100.0
+
+
+def test_load_table_stats_empty_inputs(stats_setup: tuple[StatsController, Path]) -> None:
+    """未选工作区/表名或表不存在时列统计清空。."""
+    ctrl, ws = stats_setup
+    ctrl.load_table_stats(str(ws), "t2")
+    assert ctrl.table_stats_model().rowCount() == 2
+    ctrl.load_table_stats("", "t2")
+    assert ctrl.table_stats_model().rowCount() == 0
+    ctrl.load_table_stats(str(ws), "t2")
+    ctrl.load_table_stats(str(ws), "")
+    assert ctrl.table_stats_model().rowCount() == 0
+    # 表不存在返回空列表
+    ctrl.load_table_stats(str(ws), "ghost")
+    assert ctrl.table_stats_model().rowCount() == 0
+
+
+def test_column_stat_model_display(stats_setup: tuple[StatsController, Path]) -> None:
+    """ColumnStatModel 二维表数据与表头（None 显示空串）。."""
+    from PySide2.QtCore import Qt
+
+    ctrl, ws = stats_setup
+    ctrl.load_table_stats(str(ws), "t1")
+    model = ctrl.table_stats_model()
+    assert model.columnCount() == 8
+    # 全非空：空值列显示 0，均值显示空串（TEXT 列）
+    idx = model.index(0, 0)
+    assert model.data(idx, Qt.DisplayRole) == "name"
+    assert model.data(model.index(0, 3), Qt.DisplayRole) == "0"
+    assert model.data(model.index(0, 7), Qt.DisplayRole) == ""
+    # 表头
+    assert model.headerData(0, Qt.Horizontal, Qt.DisplayRole) == "列名"
+    assert model.headerData(7, Qt.Horizontal, Qt.DisplayRole) == "平均值"
+    # 非 DisplayRole / 越界行返回 None
+    assert model.data(idx, Qt.EditRole) is None
+    assert model.data(model.index(9, 0), Qt.DisplayRole) is None
+    assert model.stat_at(9) is None

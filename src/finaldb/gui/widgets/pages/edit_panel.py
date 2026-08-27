@@ -12,6 +12,7 @@ from PySide2.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QInputDialog,
     QMessageBox,
     QPushButton,
@@ -133,7 +134,11 @@ class EditPanel(QWidget):
         self._view.setAlternatingRowColors(True)
         # 行号列：编辑定位行更直观（按页内偏移显示，跟随分页刷新）
         self._view.verticalHeader().setVisible(True)
-        self._view.horizontalHeader().setStretchLastSection(True)
+        # 列宽随内容自适应 + 末列拉伸占满（行列表格数据对齐）
+        header = self._view.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setMinimumSectionSize(72)
+        header.setStretchLastSection(True)
         body_layout.addWidget(self._view)
         self._empty = caption_label("选择左侧数据表后开始编辑")
         self._empty.setObjectName("editEmpty")

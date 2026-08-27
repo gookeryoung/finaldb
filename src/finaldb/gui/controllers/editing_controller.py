@@ -83,14 +83,21 @@ class EditingController(QObject):
     # ----------------------------- 会话管理 -----------------------------
 
     def load_tables(self, workspace_path: str) -> None:
-        """重载工作区可编辑表列表。."""
+        """重载工作区可编辑表列表（工作区变化时关闭旧编辑会话）。
+
+        切换工作区若保留会话，编辑会写入旧工作区数据库（数据"看似未保存"），
+        故路径变化即关闭当前表并清空撤销栈。
+        """
         from finaldb.core.storage.database import connect, table_infos
 
+        changed = workspace_path != self._workspace_path
         self._workspace_path = workspace_path
         if not workspace_path:
             self._tables_model.reload([])
             self._close_table()
             return
+        if changed:
+            self._close_table()
         conn = connect(Path(workspace_path) / "data.db")
         try:
             infos = table_infos(conn)

@@ -83,6 +83,10 @@ class WorkspaceController(QObject):
             self.current_changed.emit()  # pyrefly: ignore [missing-attribute]
         self.workspaces_changed.emit()  # pyrefly: ignore [missing-attribute]
 
+    def reload_tables(self) -> None:
+        """重载当前工作区表列表（编辑增删行后由数据页调用，刷新行数）。"""
+        self._reload_tables()
+
     def create_workspace(self, name: str) -> None:
         """创建工作区并选中。"""
         try:

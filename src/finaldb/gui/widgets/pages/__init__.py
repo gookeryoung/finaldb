@@ -3,23 +3,19 @@
 from __future__ import annotations
 
 from finaldb.gui.widgets.pages.about_page import AboutPage
-from finaldb.gui.widgets.pages.clean_page import CleanPage
+from finaldb.gui.widgets.pages.clean_pane import CleanPane
 from finaldb.gui.widgets.pages.data_page import DataPage
 from finaldb.gui.widgets.pages.edit_panel import EditPanel
-from finaldb.gui.widgets.pages.history_page import HistoryPage
-from finaldb.gui.widgets.pages.insights_page import InsightsPage
-from finaldb.gui.widgets.pages.merge_page import MergePage
+from finaldb.gui.widgets.pages.merge_pane import MergePane
 from finaldb.gui.widgets.pages.settings_page import SettingsPage
 from finaldb.gui.widgets.pages.stats_page import StatsPage
 
 __all__ = [
     "AboutPage",
-    "CleanPage",
+    "CleanPane",
     "DataPage",
     "EditPanel",
-    "HistoryPage",
-    "InsightsPage",
-    "MergePage",
+    "MergePane",
     "SettingsPage",
     "StatsPage",
 ]

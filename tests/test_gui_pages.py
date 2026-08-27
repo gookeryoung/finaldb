@@ -1,4 +1,4 @@
-"""Widgets 页面测试：七页装配与页面/控制器联动交互。."""
+"""Widgets 页面测试：四页装配与页面/控制器联动交互。."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.gui
 
-# main_window fixture 元组：(主窗口, 主题, 工作区/预览/清洗/合并/历史/统计/关于控制器)
+# main_window fixture 元组：(主窗口, 主题, 工作区/清洗/合并/编辑/统计/关于控制器)
 WindowFixture = Tuple[Any, ...]  # noqa: UP006  # 3.8 运行时下标兼容
 
 
@@ -33,7 +33,7 @@ def _show(window: Any, qapp: Any, page_id: str) -> Any:
 
 def test_data_workspace_and_table_flow(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
     """数据页联动：建工作区 → 导入 → 表列表点击进入编辑。."""
-    window, _theme, ws, _preview, _clean, _merge, edit, *_rest = main_window
+    window, _theme, ws, _clean, _merge, edit, *_rest = main_window
     data = _show(window, qapp, "data")
 
     ws.create_workspace("data-bind")
@@ -41,16 +41,56 @@ def test_data_workspace_and_table_flow(main_window: WindowFixture, tmp_path: Pat
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    # 工作区卡片与表列表刷新
-    assert data._ws_list.count() == 1
+    # 工作区下拉与表列表刷新
+    assert data._ws_combo.count() == 1
+    assert data._ws_combo.currentText() == "data-bind"
     assert data._table_list.count() == 1
     assert data._table_list.item(0).text() == "d (2)"
-    # 点击表项在右侧编辑面板打开编辑会话
+    # 点击表项在右侧编辑面板打开编辑会话并切到编辑模式
+    data._mode_group.button(1).setChecked(True)
     data._on_table_clicked(data._table_list.item(0))
     qapp.processEvents()
     assert edit.current_table() == "d"
     assert edit.edit_model().rowCount() == 2
+    assert data._stack.currentIndex() == 0
     assert data._editor._view.isVisible()
+    window.close()
+
+
+def test_data_mode_switch(main_window: WindowFixture, qapp: Any) -> None:
+    """数据页模式按钮组切换编辑/清洗/合并去重三个面板。."""
+    window, *_rest = main_window
+    data = _show(window, qapp, "data")
+    assert data._stack.currentIndex() == 0
+    for index in (1, 2, 0):
+        data._mode_group.button(index).click()
+        qapp.processEvents()
+        assert data._stack.currentIndex() == index
+    # 三面板互斥选中
+    assert data._mode_group.button(0).isChecked()
+    assert not data._mode_group.button(1).isChecked()
+    window.close()
+
+
+def test_data_workspace_combo_switch(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
+    """数据页工作区下拉切换：表列表与编辑会话同步刷新。."""
+    window, _theme, ws, *_rest = main_window
+    data = _show(window, qapp, "data")
+
+    ws.create_workspace("ws-a")
+    ws.create_workspace("ws-b")
+    csv_a = _csv(tmp_path, "a.csv", "x\n1\n")
+    ws.select_workspace("ws-a")
+    ws.import_file_sync(str(csv_a))
+    qapp.processEvents()
+    assert data._ws_combo.count() == 2
+    assert data._table_list.count() == 1
+
+    # 下拉切到 ws-b：表列表清空
+    data._on_workspace_activated(1)
+    qapp.processEvents()
+    assert ws.current_workspace() == "ws-b"
+    assert data._table_list.count() == 0
     window.close()
 
 
@@ -121,22 +161,22 @@ def test_data_import_error_shows_toast(main_window: WindowFixture, tmp_path: Pat
     window.close()
 
 
-# ----------------------------- 数据整理页 -----------------------------
+# ----------------------------- 数据清洗面板（数据页内嵌） -----------------------------
 
 
 def test_clean_rule_flow(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """数据整理页联动：选表 → 选列 → 加规则 → 预览与应用可用。."""
-    window, _theme, ws, _preview, clean_ctrl, *_rest = main_window
-    clean = _show(window, qapp, "clean")
+    """数据清洗面板联动：选表 → 选列 → 加规则 → 预览与应用可用。."""
+    window, _theme, ws, clean_ctrl, *_rest = main_window
+    data = _show(window, qapp, "data")
+    clean = data._clean_pane
 
     ws.create_workspace("clean-bind")
     csv = _csv(tmp_path, "d.csv", "name,age\n 甲 ,30\n乙,\n")
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    # 切回数据页再切回本页触发重载（对齐用户导航流）
-    window.set_current_page("data")
-    window.set_current_page("clean")
+    # 切到清洗模式触发面板 showEvent 重载
+    data._mode_group.button(1).click()
     qapp.processEvents()
     assert clean._table_combo.count() == 1
     clean._on_table_activated(0)
@@ -168,9 +208,10 @@ def test_clean_rule_flow(main_window: WindowFixture, tmp_path: Path, qapp: Any) 
 
 
 def test_clean_kind_params_visibility(main_window: WindowFixture, qapp: Any) -> None:
-    """数据整理页参数区按规则类型显隐。."""
+    """数据清洗面板参数区按规则类型显隐。."""
     window, *_rest = main_window
-    clean = _show(window, qapp, "clean")
+    data = _show(window, qapp, "data")
+    clean = data._clean_pane
 
     # 默认 trim：参数区隐藏
     assert not clean._value_row.isVisibleTo(clean)
@@ -188,11 +229,12 @@ def test_clean_kind_params_visibility(main_window: WindowFixture, qapp: Any) -> 
 
 
 def test_clean_rule_row_remove(main_window: WindowFixture, qapp: Any) -> None:
-    """数据整理页规则行内移除按钮回传行号。."""
+    """数据清洗面板规则行内移除按钮回传行号。."""
     from PySide2.QtCore import Qt
 
-    window, _theme, _ws, _preview, clean_ctrl, *_rest = main_window
-    clean = _show(window, qapp, "clean")
+    window, _theme, _ws, clean_ctrl, *_rest = main_window
+    data = _show(window, qapp, "data")
+    clean = data._clean_pane
     clean_ctrl.add_rule("trim", "name", "", "", "")
     clean_ctrl.add_rule("to_number", "age", "", "", "")
     qapp.processEvents()
@@ -213,22 +255,22 @@ def test_clean_rule_row_remove(main_window: WindowFixture, qapp: Any) -> None:
     window.close()
 
 
-# ----------------------------- 合并去重页 -----------------------------
+# ----------------------------- 合并去重面板（数据页内嵌） -----------------------------
 
 
 def test_merge_three_modes_flow(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """合并去重页三模式：union 多选 / dedup 键列 / join 四要素。."""
-    window, _theme, ws, _preview, _clean, merge_ctrl, *_rest = main_window
-    merge = _show(window, qapp, "merge")
+    """合并去重面板三模式：union 多选 / dedup 键列 / join 四要素。."""
+    window, _theme, ws, _clean, merge_ctrl, *_rest = main_window
+    data = _show(window, qapp, "data")
+    merge = data._merge_pane
 
     ws.create_workspace("merge-bind")
     csv = _csv(tmp_path, "d.csv", "name,age\n甲,30\n乙,25\n乙,25\n")
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    # 切回数据页再切回本页触发重载（对齐用户导航流）
-    window.set_current_page("data")
-    window.set_current_page("merge")
+    # 切到合并模式触发面板 showEvent 重载
+    data._mode_group.button(2).click()
     qapp.processEvents()
 
     # 模式 0：union 列表加载，单选不满足执行条件
@@ -281,122 +323,45 @@ def test_merge_three_modes_flow(main_window: WindowFixture, tmp_path: Path, qapp
     window.close()
 
 
-# ----------------------------- 统计与版本页 -----------------------------
+# ----------------------------- 统计页 -----------------------------
 
 
-def _history_view(window: Any, qapp: Any) -> Any:
-    """切到统计与版本页的「版本历史」子视图并返回面板。."""
-    insights = _show(window, qapp, "insights")
-    insights._seg_buttons[1].click()
-    qapp.processEvents()
-    return insights._history_pane
-
-
-def test_history_pick_diff_restore(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """版本历史面板联动：快照列表 → 点击选对比 → 双击设回滚 → 同步对比/回滚。."""
-    window, _theme, ws, *_rest = main_window
-    history = window.pages["insights"]._history_pane
-    history_ctrl = history._history
-
-    ws.create_workspace("hist-bind")
-    csv1 = _csv(tmp_path, "a.csv", "name,age\n甲,30\n乙,25\n")
-    ws.import_file_sync(str(csv1))
-    csv2 = _csv(tmp_path, "b.csv", "name,age\n丙,40\n")
-    ws.import_file_sync(str(csv2))
-    qapp.processEvents()
-
-    history = _history_view(window, qapp)
-    assert history._snap_list.count() == 2
-    model = history_ctrl.snapshots_model()
-    older = model.snapshot_at(1)
-    newer = model.snapshot_at(0)
-    assert older is not None and newer is not None
-
-    # 点击选两个快照（A 先 B 后），对比按钮可用
-    assert not history._diff_btn.isEnabled()
-    history._on_item_clicked(history._snap_list.item(1))
-    history._on_item_clicked(history._snap_list.item(0))
-    assert history._ref_a == older.short_id
-    assert history._ref_b == newer.short_id
-    assert history._diff_btn.isEnabled()
-    # 再点同一项取消选中
-    history._on_item_clicked(history._snap_list.item(1))
-    assert history._ref_a == ""
-
-    # 重新选齐并同步对比：diff 文本与视图更新
-    history._on_item_clicked(history._snap_list.item(1))
-    history_ctrl.diff_sync(ws.current_workspace_path(), history._ref_a, history._ref_b)
-    qapp.processEvents()
-    assert "表 b" in history_ctrl.diff_text()
-    assert history._diff_view.toPlainText() != ""
-
-    # 双击设回滚目标并同步回滚：表 b 消失
-    assert not history._restore_btn.isEnabled()
-    history._on_item_double_clicked(history._snap_list.item(1))
-    assert history._restore_ref == older.short_id
-    assert history._restore_btn.isEnabled()
-    history_ctrl.restore_sync(ws.current_workspace_path(), older.short_id)
-    qapp.processEvents()
-
-    from finaldb.core.storage.database import connect, table_exists
-
-    conn = connect(Path(ws.current_workspace_path()) / "data.db")
-    try:
-        assert table_exists(conn, "a")
-        assert not table_exists(conn, "b")
-    finally:
-        conn.close()
-    window.close()
-
-
-def test_history_commit_via_page(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """版本历史面板提交入口：输入说明发起提交并刷新列表。."""
-    window, _theme, ws, *_rest = main_window
-    history = window.pages["insights"]._history_pane
-    history_ctrl = history._history
-
-    ws.create_workspace("commit-bind")
-    csv = _csv(tmp_path, "c.csv", "name\n甲\n")
-    ws.import_file_sync(str(csv))
-    qapp.processEvents()
-
-    history = _history_view(window, qapp)
-    assert history._snap_list.count() == 1
-    # 修改数据后经页面入口提交新快照
-    from finaldb.core.storage.database import connect
-
-    conn = connect(Path(ws.current_workspace_path()) / "data.db")
-    conn.execute('INSERT INTO "c" VALUES (?)', ("乙",))
-    conn.commit()
-    conn.close()
-    history._message_field.setText("页面提交")
-    history_ctrl.commit_sync(ws.current_workspace_path(), "页面提交")
-    qapp.processEvents()
-    assert history_ctrl.snapshots_model().rowCount() == 2
-    window.close()
-
-
-# ----------------------------- 统计面板 -----------------------------
-
-
-def test_stats_summary_and_bars(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """统计面板联动：摘要文本与条形图行随导入刷新。."""
-    window, _theme, ws, *_rest = main_window
-    stats_page = window.pages["insights"]._stats_pane
+def test_stats_page_summary_bars_and_columns(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
+    """统计页联动：摘要、条形图与列统计表随导入刷新。."""
+    window, _theme, ws, _clean, _merge, _edit, stats_ctrl, *_rest = main_window
+    stats = _show(window, qapp, "stats")
 
     ws.create_workspace("stats-bind")
     csv = _csv(tmp_path, "s.csv", "name,age\n甲,30\n乙,25\n丙,\n")
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    # insights 页默认显示统计子视图（showEvent 触发刷新）
-    _show(window, qapp, "insights")
-    assert stats_page._summary.text() == "共 1 张表，3 行数据"
-    assert len(stats_page._bars) == 1
+    # showEvent 触发重载：摘要 + 条形图 + 表下拉
+    window.set_current_page("data")
+    stats = _show(window, qapp, "stats")
+    assert stats._summary.text().startswith("共 1 张表")
+    assert "3 行" in stats._summary.text()
+    assert len(stats._bars) == 1
+    assert stats._table_combo.count() == 1
+    # 未选表时列统计空态
+    assert not stats._stat_view.isVisible()
+    assert stats._stat_view.model().rowCount() == 0
+
+    # 选择表加载列统计（CSV 导入列为 TEXT：空值/唯一值正确，均值仅数值列计算）
+    stats._on_table_activated(0)
+    qapp.processEvents()
+    model = stats_ctrl.table_stats_model()
+    assert model.rowCount() == 2
+    name_stat = model.stat_at(0)
+    age_stat = model.stat_at(1)
+    assert name_stat is not None and name_stat.name == "name"
+    assert name_stat.null_count == 0 and name_stat.distinct_count == 3
+    assert age_stat is not None and age_stat.null_count == 1
+    assert age_stat.sql_type == "TEXT"
+    assert age_stat.mean is None
     # 主题切换联动条形颜色
-    window_pages_theme = window.sidebar._theme
-    window_pages_theme.set_dark(True)
-    assert "#7AA2F7" in stats_page._bars[0].styleSheet()
+    window.sidebar._theme.set_dark(True)
+    assert "#7AA2F7" in stats._bars[0].styleSheet()
     window.close()
 
 

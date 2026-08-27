@@ -1,4 +1,4 @@
-"""工作区控制器 / 导入 Worker / 预览控制器 / 模型测试。."""
+"""工作区控制器 / 导入 Worker / 模型测试。."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import pytest
 from PySide2.QtCore import Qt
 from PySide2.QtGui import QGuiApplication
 
-from finaldb.gui.controllers.preview_controller import PreviewController
 from finaldb.gui.controllers.workspace_controller import (
     WorkspaceController,
     _to_local_path,
@@ -189,23 +188,6 @@ def test_import_worker_success_and_failure(tmp_path: Path) -> None:
     assert bad and "导入失败" in bad[0]
 
 
-def test_preview_controller_load_and_clear(ctrl: WorkspaceController, tmp_path: Path) -> None:
-    """预览控制器加载表前 200 行并支持清空。."""
-    ctrl.create_workspace("alpha")
-    ctrl.import_file_sync(str(_csv(tmp_path)))
-    preview = PreviewController()
-    preview.load_table(ctrl.current_workspace_path(), "demo")
-    assert preview.table_name() == "demo"
-    assert preview.preview_model().rowCount() == 2
-    assert preview.preview_model().columnCount() == 2
-    idx = preview.preview_model().index(0, 1)
-    assert preview.preview_model().data(idx, Qt.DisplayRole) == "x"
-    assert preview.preview_model().headerData(0, Qt.Horizontal, Qt.DisplayRole) == "a"
-    preview.clear()
-    assert preview.table_name() == ""
-    assert preview.preview_model().rowCount() == 0
-
-
 def test_workspace_model_data_roles(ctrl: WorkspaceController) -> None:
     """WorkspaceListModel 角色数据与边界行为。."""
     ctrl.create_workspace("alpha")
@@ -229,17 +211,12 @@ def test_workspace_model_data_roles(ctrl: WorkspaceController) -> None:
     assert ctrl.workspace_model().rowCount() == 0
 
 
-def test_table_preview_model_edges(qapp: object) -> None:
-    """TablePreviewModel 边界：空模型、无效索引、非显示角色。."""
-    from finaldb.gui.models.table_model import TableListModel, TablePreviewModel
+def test_table_list_model_edges(qapp: object) -> None:
+    """TableListModel 边界：空模型、无效索引、未知角色。."""
+    from finaldb.gui.models.table_model import TableListModel
 
-    m = TablePreviewModel()
-    assert m.rowCount() == 0 and m.columnCount() == 0
-    assert m.data(m.index(0, 0), Qt.DisplayRole) is None
-    assert m.headerData(0, Qt.Horizontal, Qt.DisplayRole) is None
-    m.reset_data(["x"], [(1,)])
-    assert m.data(m.index(0, 0), Qt.EditRole) is None  # 非 DisplayRole
     tl = TableListModel()
+    assert tl.rowCount() == 0
     assert tl.table_at(0) is None
     assert tl.data(tl.index(0, 0), Qt.UserRole + 1) is None
     tl.reload([("t", 5)])

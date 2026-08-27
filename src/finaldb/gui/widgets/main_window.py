@@ -8,21 +8,19 @@ from PySide2.QtWidgets import QHBoxLayout, QMainWindow, QShortcut, QStackedWidge
 from finaldb.app_controllers import Controllers
 from finaldb.gui.theme import ThemeManager
 from finaldb.gui.widgets.pages.about_page import AboutPage
-from finaldb.gui.widgets.pages.clean_page import CleanPage
 from finaldb.gui.widgets.pages.data_page import DataPage
-from finaldb.gui.widgets.pages.insights_page import InsightsPage
-from finaldb.gui.widgets.pages.merge_page import MergePage
 from finaldb.gui.widgets.pages.settings_page import SettingsPage
+from finaldb.gui.widgets.pages.stats_page import StatsPage
 from finaldb.gui.widgets.sidebar import Sidebar
 
 __all__ = ["PAGE_ORDER", "MainWindow"]
 
-# 页面顺序（Ctrl+1..6 对应索引）
-PAGE_ORDER = ["data", "clean", "merge", "insights", "settings", "about"]
+# 页面顺序（Ctrl+1..4 对应索引）
+PAGE_ORDER = ["data", "stats", "settings", "about"]
 
 
 class MainWindow(QMainWindow):
-    """六页导航主窗口。."""
+    """四页导航主窗口。."""
 
     def __init__(self, theme: ThemeManager, controllers: Controllers, parent: QWidget | None = None) -> None:
         """初始化主窗口并组装侧边栏与页面栈。
@@ -49,15 +47,14 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.pages = {
-            "data": DataPage(theme, controllers["workspace"], controllers["editing"]),
-            "clean": CleanPage(theme, controllers["workspace"], controllers["clean"]),
-            "merge": MergePage(theme, controllers["workspace"], controllers["merge"]),
-            "insights": InsightsPage(
+            "data": DataPage(
                 theme,
                 controllers["workspace"],
-                controllers["stats"],
-                controllers["history"],
+                controllers["editing"],
+                controllers["clean"],
+                controllers["merge"],
             ),
+            "stats": StatsPage(theme, controllers["workspace"], controllers["stats"]),
             "settings": SettingsPage(theme, controllers["workspace"], controllers["about"]),
             "about": AboutPage(theme, controllers["about"]),
         }
@@ -101,7 +98,7 @@ class MainWindow(QMainWindow):
                 return
 
     def _build_shortcuts(self) -> None:
-        """注册全局快捷键：Ctrl+1..6 切页，Ctrl+B 折叠侧边栏。."""
+        """注册全局快捷键：Ctrl+1..4 切页，Ctrl+B 折叠侧边栏。."""
         for i, page_id in enumerate(PAGE_ORDER, start=1):
             shortcut = QShortcut(QKeySequence(f"Ctrl+{i}"), self)
             shortcut.activated.connect(lambda pid=page_id: self.set_current_page(pid))

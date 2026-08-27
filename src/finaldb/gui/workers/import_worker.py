@@ -52,6 +52,7 @@ class ImportWorker(QObject):
         if not results:
             self.finished.emit(_EMPTY_SUMMARY)  # pyrefly: ignore [missing-attribute]
             return
+
         # 导入成功后自动打快照（无变化时静默跳过，快照失败不阻断导入结果）
         self._auto_snapshot()
         summary = "、".join(f"{r.table}({r.rows} 行)" for r in results)

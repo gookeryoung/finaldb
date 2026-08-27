@@ -1,14 +1,14 @@
-"""清洗页模型：规则列表（ListModel）与列名列表（ListModel）。."""
+"""清洗模型：规则列表、列名列表与清洗预览（TableModel）。."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from PySide2.QtCore import QAbstractListModel, QByteArray, QModelIndex, Qt
+from PySide2.QtCore import QAbstractListModel, QAbstractTableModel, QByteArray, QModelIndex, Qt
 
 from finaldb.core.cleaning.rules import CleanRule
 
-__all__ = ["CleanRuleListModel", "StringListModel"]
+__all__ = ["CleanPreviewModel", "CleanRuleListModel", "StringListModel"]
 
 _ROLE_KIND = QByteArray(b"kind")
 _ROLE_COLUMN = QByteArray(b"column")
@@ -127,3 +127,47 @@ class StringListModel(QAbstractListModel):
         if 0 <= row < len(self._items):
             return self._items[row]
         return None
+
+
+class CleanPreviewModel(QAbstractTableModel):
+    """清洗预览表格模型（前 N 行，列头为原列名）。."""
+
+    def __init__(self, parent: object | None = None) -> None:
+        """初始化空模型。."""
+        super().__init__(parent)
+        self._columns: list[str] = []
+        self._rows: list[tuple[object, ...]] = []
+
+    def rowCount(self, parent: QModelIndex = _NO_PARENT) -> int:
+        """行数。."""
+        return 0 if parent.isValid() else len(self._rows)
+
+    def columnCount(self, parent: QModelIndex = _NO_PARENT) -> int:
+        """列数。."""
+        return 0 if parent.isValid() else len(self._columns)
+
+    def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> Any:
+        """返回单元格显示文本（None 显示为空串）。."""
+        if not index.isValid() or role != Qt.DisplayRole:
+            return None
+        if not (0 <= index.row() < len(self._rows)):
+            return None
+        row = self._rows[index.row()]
+        col = index.column()
+        if not (0 <= col < len(row)):
+            return None
+        value = row[col]
+        return "" if value is None else str(value)
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> Any:
+        """列头返回列名。."""
+        if role == Qt.DisplayRole and orientation == Qt.Horizontal and 0 <= section < len(self._columns):
+            return self._columns[section]
+        return None
+
+    def reset_data(self, columns: list[str], rows: list[tuple[object, ...]]) -> None:
+        """整体替换预览数据并通知视图。."""
+        self.beginResetModel()
+        self._columns = list(columns)
+        self._rows = list(rows)
+        self.endResetModel()

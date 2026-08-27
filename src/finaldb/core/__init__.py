@@ -14,6 +14,7 @@ from finaldb.core.exceptions import (
 )
 from finaldb.core.importers import import_file, import_into_workspace
 from finaldb.core.merge import JoinSpec, MergeJob, MergeSummary, dedup_table, join_tables, union_tables
+from finaldb.core.stats import ColumnStat, WorkspaceOverview, column_stats, workspace_overview
 from finaldb.core.storage.database import TableInfo, connect
 from finaldb.core.versioning import (
     SnapshotInfo,
@@ -30,6 +31,7 @@ __all__ = [
     "CleanReport",
     "CleanRule",
     "CleanSummary",
+    "ColumnStat",
     "FinaldbError",
     "JoinSpec",
     "MergeError",
@@ -45,7 +47,9 @@ __all__ = [
     "WorkspaceError",
     "WorkspaceManager",
     "WorkspaceMeta",
+    "WorkspaceOverview",
     "clean_table",
+    "column_stats",
     "commit_snapshot",
     "connect",
     "dedup_table",
@@ -57,4 +61,5 @@ __all__ = [
     "restore_snapshot",
     "snapshot_diff",
     "union_tables",
+    "workspace_overview",
 ]

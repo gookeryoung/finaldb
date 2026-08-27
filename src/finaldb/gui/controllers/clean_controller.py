@@ -14,8 +14,8 @@ from finaldb.core.cleaning.engine import apply_rules
 from finaldb.core.cleaning.rules import CaseMode, CleanRule, RuleKind
 from finaldb.core.exceptions import CleanError
 from finaldb.core.storage.database import column_infos, connect, fetch_preview, table_infos
-from finaldb.gui.models.clean_models import CleanRuleListModel, StringListModel
-from finaldb.gui.models.table_model import TableListModel, TablePreviewModel
+from finaldb.gui.models.clean_models import CleanPreviewModel, CleanRuleListModel, StringListModel
+from finaldb.gui.models.table_model import TableListModel
 from finaldb.gui.workers.clean_worker import CleanWorker
 
 __all__ = ["CleanController"]
@@ -40,7 +40,7 @@ class CleanController(QObject):
         self._tables_model = TableListModel(self)
         self._columns_model = StringListModel(self)
         self._rules_model = CleanRuleListModel(self)
-        self._preview_model = TablePreviewModel(self)
+        self._preview_model = CleanPreviewModel(self)
         self._report_text = ""
         self._busy = False
         self._thread: QThread | None = None
@@ -60,7 +60,7 @@ class CleanController(QObject):
         """规则列表模型。."""
         return self._rules_model
 
-    def preview_model(self) -> TablePreviewModel:
+    def preview_model(self) -> CleanPreviewModel:
         """清洗预览表格模型。."""
         return self._preview_model
 

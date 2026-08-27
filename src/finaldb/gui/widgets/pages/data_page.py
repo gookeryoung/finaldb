@@ -1,14 +1,16 @@
-"""数据页：工作区管理 + 数据导入 + 表列表 + 编辑面板。
+"""数据页：工作区/表选择面板 + 数据操作三模式（编辑/清洗/合并去重）。
 
-整合原数据源页与数据编辑页：左侧选择工作区与表，
-右侧直接编辑选中表，消除重复的表选择入口。
+左侧单面板承载工作区下拉与表列表（替代原双卡片），右侧按模式按钮切换
+编辑面板、清洗面板与合并去重面板——数据操作整合在同一入口下。
 """
 
 from __future__ import annotations
 
-from PySide2.QtCore import QSize, Qt, Signal
-from PySide2.QtGui import QFont, QMouseEvent, QShowEvent
+from PySide2.QtCore import Qt
+from PySide2.QtGui import QShowEvent
 from PySide2.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QInputDialog,
@@ -17,18 +19,20 @@ from PySide2.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from finaldb.gui.controllers.clean_controller import CleanController
 from finaldb.gui.controllers.editing_controller import EditingController
-from finaldb.gui.controllers.workspace_controller import (
-    WorkspaceController,
-    format_timestamp,
-)
+from finaldb.gui.controllers.merge_controller import MergeController
+from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
-from finaldb.gui.widgets.common import busy_bar, card, page_title, workspace_hint
+from finaldb.gui.widgets.common import busy_bar, caption_label, card, page_title, workspace_hint
+from finaldb.gui.widgets.pages.clean_pane import CleanPane
 from finaldb.gui.widgets.pages.edit_panel import EditPanel
+from finaldb.gui.widgets.pages.merge_pane import MergePane
 from finaldb.gui.widgets.toast import Toast
 
 __all__ = ["DataPage"]
@@ -36,60 +40,20 @@ __all__ = ["DataPage"]
 # 导入文件选择器的名称过滤器
 _IMPORT_FILTER = "数据文件 (*.csv *.tsv *.xlsx *.xlsm *.json *.ndjson);;所有文件 (*)"
 
-
-class _WorkspaceCard(QWidget):
-    """工作区卡片行：名称 + 概要 + 删除按钮（✕）。."""
-
-    selected = Signal(str)
-    delete_requested = Signal(str)
-
-    def __init__(self, name: str, summary: str, parent: QWidget | None = None) -> None:
-        """初始化卡片行。
-
-        :param name: 工作区名
-        :param summary: 概要文本（表数/行数/更新时间）
-        """
-        super().__init__(parent)
-        self._name = name
-        root = QVBoxLayout(self)
-        root.setContentsMargins(10, 8, 6, 8)
-        root.setSpacing(2)
-
-        top = QHBoxLayout()
-        top.setSpacing(6)
-        name_label = QLabel(name)
-        font = QFont()
-        font.setBold(True)
-        name_label.setFont(font)
-        delete_btn = QPushButton("✕")
-        delete_btn.setProperty("linkButton", True)
-        delete_btn.setCursor(Qt.PointingHandCursor)
-        delete_btn.setToolTip("删除工作区")
-        delete_btn.clicked.connect(lambda: self.delete_requested.emit(self._name))  # pyrefly: ignore [missing-attribute]
-        top.addWidget(name_label, stretch=1)
-        top.addWidget(delete_btn)
-
-        summary_label = QLabel(summary)
-        summary_label.setProperty("caption", True)
-        root.addLayout(top)
-        root.addWidget(summary_label)
-
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        """点击卡片任意区域即选中工作区。."""
-        if event.button() == Qt.LeftButton:
-            self.selected.emit(self._name)  # pyrefly: ignore [missing-attribute]
-        super().mousePressEvent(event)
+# 数据操作模式标题（与右侧面板栈顺序一致）
+_MODE_TITLES = ("编辑", "数据清洗", "合并去重")
 
 
 class DataPage(QWidget):
-    """数据页：三栏布局（工作区列表 | 表列表 | 编辑面板）。."""
+    """数据页：左（工作区下拉 + 表列表）| 右（模式按钮 + 操作面板栈）。."""
 
     def __init__(
         self,
         theme: ThemeManager,
         workspace_ctrl: WorkspaceController,
         editing_ctrl: EditingController,
-        parent: QWidget | None = None,
+        clean_ctrl: CleanController,
+        merge_ctrl: MergeController,
     ) -> None:
         """初始化页面并装配控制器信号。
 
@@ -97,9 +61,10 @@ class DataPage(QWidget):
             theme: 主题管理器
             workspace_ctrl: 工作区控制器
             editing_ctrl: 编辑控制器
-            parent: 父部件
+            clean_ctrl: 清洗控制器
+            merge_ctrl: 合并控制器
         """
-        super().__init__(parent)
+        super().__init__()
         self._theme = theme
         self._ws = workspace_ctrl
         self._edit = editing_ctrl
@@ -124,46 +89,74 @@ class DataPage(QWidget):
         bar.addWidget(self._import_btn)
         root.addLayout(bar)
 
-        # ---------- 主体三栏 ----------
+        # ---------- 主体两栏 ----------
         body = QHBoxLayout()
         body.setSpacing(SPACING_MD)
 
-        # 工作区卡片列表
-        ws_card = card()
-        ws_card.setFixedWidth(240)
-        ws_layout = QVBoxLayout(ws_card)
-        ws_layout.setContentsMargins(SPACING_SM, SPACING_SM, SPACING_SM, SPACING_SM)
-        self._ws_list = QListWidget()
-        self._ws_list.setObjectName("wsList")
-        self._ws_list.setCursor(Qt.PointingHandCursor)
-        ws_layout.addWidget(self._ws_list)
-        self._ws_empty = QLabel("暂无工作区\n点击右上角「新建工作区」开始")
-        self._ws_empty.setProperty("caption", True)
-        self._ws_empty.setAlignment(Qt.AlignCenter)
-        self._ws_empty.setWordWrap(True)
-        ws_layout.addWidget(self._ws_empty)
-        body.addWidget(ws_card)
+        # 左：工作区下拉 + 表列表（单面板）
+        left = card()
+        left.setFixedWidth(230)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(SPACING_SM, SPACING_SM, SPACING_SM, SPACING_SM)
+        left_layout.setSpacing(SPACING_SM)
 
-        # 当前工作区表列表
-        table_card = card()
-        table_card.setFixedWidth(180)
-        table_layout = QVBoxLayout(table_card)
-        table_layout.setContentsMargins(SPACING_SM, SPACING_SM, SPACING_SM, SPACING_SM)
+        left_layout.addWidget(caption_label("工作区"))
+        ws_row = QHBoxLayout()
+        ws_row.setSpacing(SPACING_SM)
+        self._ws_combo = QComboBox()
+        self._ws_combo.setObjectName("workspaceCombo")
+        self._ws_combo.activated.connect(self._on_workspace_activated)
+        ws_row.addWidget(self._ws_combo, stretch=1)
+        self._ws_delete_btn = QPushButton("✕")
+        self._ws_delete_btn.setProperty("linkButton", True)
+        self._ws_delete_btn.setCursor(Qt.PointingHandCursor)
+        self._ws_delete_btn.setToolTip("删除当前工作区")
+        self._ws_delete_btn.clicked.connect(self._on_delete_workspace_clicked)
+        ws_row.addWidget(self._ws_delete_btn)
+        left_layout.addLayout(ws_row)
+
+        left_layout.addWidget(caption_label("数据表"))
         self._table_list = QListWidget()
         self._table_list.setObjectName("tableList")
         self._table_list.setCursor(Qt.PointingHandCursor)
         self._table_list.itemClicked.connect(self._on_table_clicked)
-        table_layout.addWidget(self._table_list)
+        left_layout.addWidget(self._table_list, stretch=1)
         self._table_empty = QLabel("先选择工作区")
         self._table_empty.setProperty("caption", True)
         self._table_empty.setAlignment(Qt.AlignCenter)
         self._table_empty.setWordWrap(True)
-        table_layout.addWidget(self._table_empty)
-        body.addWidget(table_card)
+        left_layout.addWidget(self._table_empty)
+        body.addWidget(left)
 
-        # 编辑面板（表由左侧列表选择，点击即在原地编辑）
+        # 右：模式按钮 + 操作面板栈
+        right = QVBoxLayout()
+        right.setSpacing(SPACING_SM)
+
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(SPACING_SM)
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.setExclusive(True)
+        for index, title in enumerate(_MODE_TITLES):
+            mode_btn = QPushButton(title)
+            mode_btn.setProperty("modeButton", True)
+            mode_btn.setCheckable(True)
+            mode_btn.setChecked(index == 0)
+            mode_btn.setCursor(Qt.PointingHandCursor)
+            self._mode_group.addButton(mode_btn, index)
+            mode_btn.clicked.connect(lambda _=False, idx=index: self._stack.setCurrentIndex(idx))
+            mode_row.addWidget(mode_btn)
+        mode_row.addStretch(1)
+        right.addLayout(mode_row)
+
+        self._stack = QStackedWidget()
         self._editor = EditPanel(theme, editing_ctrl)
-        body.addWidget(self._editor, stretch=1)
+        self._clean_pane = CleanPane(theme, workspace_ctrl, clean_ctrl)
+        self._merge_pane = MergePane(theme, workspace_ctrl, merge_ctrl)
+        self._stack.addWidget(self._editor)
+        self._stack.addWidget(self._clean_pane)
+        self._stack.addWidget(self._merge_pane)
+        right.addWidget(self._stack, stretch=1)
+        body.addLayout(right, stretch=1)
 
         root.addLayout(body, stretch=1)
 
@@ -176,6 +169,8 @@ class DataPage(QWidget):
         self._ws.import_finished.connect(self._toast.show_message)  # pyrefly: ignore [missing-attribute]
         self._ws.import_failed.connect(self._toast.show_error)  # pyrefly: ignore [missing-attribute]
         self._ws.error_raised.connect(self._toast.show_error)  # pyrefly: ignore [missing-attribute]
+        # 编辑增删行后刷新表列表行数（编辑控制器整表重载时同步）
+        self._edit.tables_model().modelReset.connect(self._ws.reload_tables)
 
         self._refresh_workspaces()
         self._on_workspace_changed()
@@ -188,29 +183,36 @@ class DataPage(QWidget):
         self._on_workspace_changed()
 
     def _refresh_workspaces(self) -> None:
-        """按工作区模型重建卡片列表。."""
+        """按工作区模型重建下拉项并同步当前选中。."""
         model = self._ws.workspace_model()
-        self._ws_list.clear()
+        names: list[str] = []
         for row in range(model.rowCount()):
             meta = model.meta_at(row)
-            if meta is None:
-                continue
-            item = QListWidgetItem()
-            item.setSizeHint(QSize(228, 56))
-            self._ws_list.addItem(item)
-            summary = f"{meta.table_count} 张表 · {meta.total_rows} 行 · {format_timestamp(meta.updated_at)}"
-            row_widget = _WorkspaceCard(meta.name, summary, self._ws_list)
-            row_widget.selected.connect(self._on_select_workspace)  # pyrefly: ignore [missing-attribute]
-            row_widget.delete_requested.connect(self._on_delete_workspace)  # pyrefly: ignore [missing-attribute]
-            self._ws_list.setItemWidget(item, row_widget)
-        self._ws_empty.setVisible(model.rowCount() == 0)
+            names.append(meta.name if meta else "")
+        self._ws_combo.blockSignals(True)
+        self._ws_combo.clear()
+        self._ws_combo.addItems(names)
+        current = self._ws.current_workspace()
+        if current in names:
+            self._ws_combo.setCurrentText(current)
+        self._ws_combo.blockSignals(False)
 
-    def _on_select_workspace(self, name: str) -> None:
-        """点击工作区卡片：选中并重载表列表。."""
-        self._ws.select_workspace(name)
+    def _on_workspace_activated(self, index: int) -> None:
+        """下拉选择工作区。."""
+        name = self._ws_combo.itemText(index)
+        if name:
+            self._ws.select_workspace(name)
+
+    def _on_delete_workspace_clicked(self) -> None:
+        """删除按钮：确认后删除当前工作区。."""
+        name = self._ws.current_workspace()
+        if not name:
+            self._toast.show_message("请先选择工作区")
+            return
+        self._on_delete_workspace(name)
 
     def _on_delete_workspace(self, name: str) -> None:
-        """点击 ✕：确认后删除工作区。."""
+        """确认后删除工作区。."""
         answer = QMessageBox.question(
             self,
             "删除工作区",
@@ -234,7 +236,12 @@ class DataPage(QWidget):
             self._ws.import_file(path)
 
     def _on_workspace_changed(self) -> None:
-        """当前工作区切换：刷新表列表、编辑面板与按钮状态。."""
+        """当前工作区切换：同步下拉、刷新表列表/编辑面板与按钮状态。."""
+        current = self._ws.current_workspace()
+        if self._ws_combo.currentText() != current:
+            self._ws_combo.blockSignals(True)
+            self._ws_combo.setCurrentText(current)
+            self._ws_combo.blockSignals(False)
         self._refresh_tables()
         self._editor.refresh_tables(self._ws.current_workspace_path())
         self._update_actions()
@@ -258,9 +265,11 @@ class DataPage(QWidget):
         self._table_empty.setVisible(not has_tables)
 
     def _on_table_clicked(self, item: QListWidgetItem) -> None:
-        """点击表项：在右侧编辑面板中打开该表。."""
+        """点击表项：切到编辑模式并打开该表。."""
         name = str(item.data(Qt.UserRole) or "")
         if name:
+            self._mode_group.button(0).setChecked(True)
+            self._stack.setCurrentIndex(0)
             self._editor.open_table(name)
 
     # ----------------------------- 状态 -----------------------------

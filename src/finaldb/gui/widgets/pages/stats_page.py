@@ -1,22 +1,25 @@
-"""统计面板：工作区表分布概览与条形图（嵌入统计与版本页）。."""
+"""统计页：工作区概览 + 表行数分布条形图 + 单表列级统计表。."""
 
 from __future__ import annotations
 
 from PySide2.QtCore import Qt
 from PySide2.QtGui import QShowEvent
 from PySide2.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QPushButton,
     QScrollArea,
+    QTableView,
     QVBoxLayout,
     QWidget,
 )
 
 from finaldb.gui.controllers.stats_controller import StatsController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
-from finaldb.gui.theme import SPACING_SM, ThemeManager
-from finaldb.gui.widgets.common import caption_label, card
+from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
+from finaldb.gui.widgets.common import caption_label, card, page_title, workspace_hint
 
 __all__ = ["StatsPage"]
 
@@ -26,7 +29,7 @@ _BAR_MIN_WIDTH = 4
 
 
 class StatsPage(QWidget):
-    """统计面板：摘要 + 表行数分布条形图（滚动容器）。."""
+    """统计页：概览摘要 + 左侧表分布条形图 + 右侧列统计表。."""
 
     def __init__(
         self,
@@ -35,7 +38,7 @@ class StatsPage(QWidget):
         stats_ctrl: StatsController,
         parent: QWidget | None = None,
     ) -> None:
-        """初始化面板并装配控制器信号。
+        """初始化页面并装配控制器信号。
 
         Args:
             theme: 主题管理器
@@ -48,17 +51,19 @@ class StatsPage(QWidget):
         self._ws = workspace_ctrl
         self._stats = stats_ctrl
         self._bars: list[QWidget] = []
+        self._current_table = ""
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(SPACING_SM)
+        root.setContentsMargins(SPACING_MD, SPACING_MD, SPACING_MD, SPACING_MD)
+        root.setSpacing(SPACING_MD)
 
-        # ---------- 顶部工具栏（右对齐刷新入口） ----------
+        # ---------- 顶部工具栏 ----------
         bar = QHBoxLayout()
         bar.setSpacing(SPACING_SM)
-        bar.addStretch(1)
+        bar.addWidget(page_title("统计"))
+        bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据页选择）"), stretch=1)
         refresh_btn = QPushButton("刷新")
-        refresh_btn.clicked.connect(lambda: self._stats.load_stats(self._ws.current_workspace_path()))
+        refresh_btn.clicked.connect(self._reload_all)
         bar.addWidget(refresh_btn)
         root.addLayout(bar)
 
@@ -67,10 +72,17 @@ class StatsPage(QWidget):
         self._summary.setObjectName("statsSummary")
         root.addWidget(self._summary)
 
-        # ---------- 表分布条形图 ----------
-        chart_card = card()
-        card_layout = QVBoxLayout(chart_card)
-        card_layout.setContentsMargins(12, 12, 12, 12)
+        # ---------- 主体两栏 ----------
+        body = QHBoxLayout()
+        body.setSpacing(SPACING_MD)
+
+        # 左：表行数分布条形图
+        left = card()
+        left.setFixedWidth(300)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(SPACING_SM, SPACING_SM, SPACING_SM, SPACING_SM)
+        left_layout.setSpacing(SPACING_SM)
+        left_layout.addWidget(caption_label("表行数分布"))
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._rows_host = QWidget()
@@ -79,14 +91,48 @@ class StatsPage(QWidget):
         self._rows_layout.setSpacing(SPACING_SM)
         self._rows_layout.addStretch(1)
         self._scroll.setWidget(self._rows_host)
-        card_layout.addWidget(self._scroll)
-        root.addWidget(chart_card, stretch=1)
+        left_layout.addWidget(self._scroll, stretch=1)
+        body.addWidget(left)
+
+        # 右：表选择 + 列统计表
+        right = card()
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(SPACING_SM, SPACING_SM, SPACING_SM, SPACING_SM)
+        right_layout.setSpacing(SPACING_SM)
+
+        table_row = QHBoxLayout()
+        table_row.setSpacing(SPACING_SM)
+        table_row.addWidget(caption_label("数据表"))
+        self._table_combo = QComboBox()
+        self._table_combo.setObjectName("statsTableCombo")
+        self._table_combo.activated.connect(self._on_table_activated)
+        table_row.addWidget(self._table_combo, stretch=1)
+        right_layout.addLayout(table_row)
+
+        self._stat_view = QTableView()
+        self._stat_view.setObjectName("statsView")
+        self._stat_view.setModel(self._stats.table_stats_model())
+        self._stat_view.setEditTriggers(QTableView.NoEditTriggers)
+        self._stat_view.setAlternatingRowColors(True)
+        self._stat_view.verticalHeader().setVisible(False)
+        header = self._stat_view.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setMinimumSectionSize(72)
+        header.setStretchLastSection(True)
+        right_layout.addWidget(self._stat_view, stretch=1)
+
+        self._stat_empty = caption_label("选择数据表后查看列统计")
+        self._stat_empty.setAlignment(Qt.AlignCenter)
+        self._stat_empty.setWordWrap(True)
+        right_layout.addWidget(self._stat_empty)
+        body.addWidget(right, stretch=1)
+
+        root.addLayout(body, stretch=1)
 
         # ---------- 信号装配 ----------
         self._stats.stats_changed.connect(self._refresh)  # pyrefly: ignore [missing-attribute]
-        self._ws.current_changed.connect(  # pyrefly: ignore [missing-attribute]
-            lambda: self._stats.load_stats(self._ws.current_workspace_path())
-        )
+        self._stats.table_stats_changed.connect(self._update_stat_state)  # pyrefly: ignore [missing-attribute]
+        self._ws.current_changed.connect(self._on_workspace_changed)  # pyrefly: ignore [missing-attribute]
         self._theme.theme_changed.connect(self._restyle_bars)  # pyrefly: ignore [missing-attribute]
 
         self._stats.load_stats(self._ws.current_workspace_path())
@@ -95,14 +141,33 @@ class StatsPage(QWidget):
     # ----------------------------- 内部 -----------------------------
 
     def showEvent(self, event: QShowEvent) -> None:
-        """页面可见时刷新统计（对齐 QML onVisibleChanged）。."""
+        """页面可见时刷新统计。."""
         super().showEvent(event)
         if self._ws.current_workspace_path():
-            self._stats.load_stats(self._ws.current_workspace_path())
+            self._reload_all()
+
+    def _reload_all(self) -> None:
+        """重载概览与当前表列统计。."""
+        path = self._ws.current_workspace_path()
+        self._stats.load_stats(path)
+        self._refresh()
+        self._stats.load_table_stats(path, self._current_table)
+
+    def _on_workspace_changed(self) -> None:
+        """工作区切换：重置表选择并重载统计。."""
+        self._current_table = ""
+        self._stats.load_stats(self._ws.current_workspace_path())
+        self._stats.load_table_stats(self._ws.current_workspace_path(), "")
+
+    def _on_table_activated(self, index: int) -> None:
+        """选择数据表：加载该表列统计。."""
+        self._current_table = self._table_combo.itemText(index)
+        self._stats.load_table_stats(self._ws.current_workspace_path(), self._current_table)
 
     def _refresh(self) -> None:
-        """统计变化：刷新摘要并重建条形图行。."""
+        """统计变化：刷新摘要、表下拉并重建条形图行。."""
         self._summary.setText(self._stats.summary_text())
+        self._reload_table_combo()
         # 清空旧行（保留尾部弹簧）
         while self._rows_layout.count() > 1:
             item = self._rows_layout.takeAt(0)
@@ -119,6 +184,29 @@ class StatsPage(QWidget):
             ratio = float(model.data(index, Qt.UserRole + 5) or 0.0)
             self._rows_layout.insertLayout(self._rows_layout.count() - 1, self._build_bar_row(name, ratio, rows))
         self._restyle_bars()
+        self._update_stat_state()
+
+    def _reload_table_combo(self) -> None:
+        """按统计模型刷新表下拉（保持当前选择有效）。."""
+        names = self._stats.table_names()
+        self._table_combo.blockSignals(True)
+        self._table_combo.clear()
+        self._table_combo.addItems(names)
+        if self._current_table in names:
+            self._table_combo.setCurrentText(self._current_table)
+        else:
+            self._current_table = ""
+        self._table_combo.blockSignals(False)
+
+    def _update_stat_state(self) -> None:
+        """按模型行数切换统计表与空态。."""
+        has_stats = self._stats.table_stats_model().rowCount() > 0
+        self._stat_view.setVisible(has_stats)
+        self._stat_empty.setVisible(not has_stats)
+        if not has_stats:
+            self._stat_empty.setText(
+                "选择数据表后查看列统计" if self._table_combo.count() > 0 else "当前工作区暂无数据表"
+            )
 
     def _build_bar_row(self, name: str, ratio: float, rows: object) -> QHBoxLayout:
         """构建单行条形图：名称 | 比例条 | 行数。."""
