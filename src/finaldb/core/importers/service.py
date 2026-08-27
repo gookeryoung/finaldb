@@ -83,13 +83,13 @@ def _import_table(conn: sqlite3.Connection, data: TableData, source: str) -> Imp
     if not data.columns:
         raise UnsupportedFormatError(f"数据无列: {source}")
     table = find_free_table_name(conn, data.name)
-    # 采样前 200 行推断列类型（rows 为生成器，islice 不破坏后续迭代）
-    sample = list(islice(data.rows, _TYPE_SAMPLE_ROWS))
+    # 先统一为迭代器再采样：rows 契约为 Iterable（JSON 传 list、CSV/Excel 传生成器），
+    # 直接对 list 做 islice 不会推进它，后续 rest 会把采样行重复入库
+    rows_iter = iter(data.rows)
+    sample = list(islice(rows_iter, _TYPE_SAMPLE_ROWS))
     sql_types = [_infer_column_type(sample, i) for i in range(len(data.columns))]
     create_table(conn, table, list(data.columns), sql_types)
-    rows: Iterator[tuple[object, ...]] = iter(sample)
-    rest = data.rows
-    chained = _chain_iterables(rows, rest)
+    chained = _chain_iterables(iter(sample), rows_iter)
     count = insert_rows(conn, table, list(data.columns), chained)
     return ImportResult(table=table, rows=count, source=source)
 
