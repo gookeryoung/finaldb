@@ -1,4 +1,4 @@
-"""版本历史页：快照列表 + 提交 + 对比 + 回滚。."""
+"""版本历史面板：快照列表 + 提交 + 对比 + 回滚（嵌入统计与版本页）。."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from PySide2.QtWidgets import (
 from finaldb.gui.controllers.history_controller import HistoryController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
-from finaldb.gui.widgets.common import busy_bar, caption_label, card, page_title, workspace_hint
+from finaldb.gui.widgets.common import busy_bar, caption_label, card
 from finaldb.gui.widgets.toast import Toast
 
 __all__ = ["HistoryPage"]
@@ -29,7 +29,7 @@ _RESTORE_MARK = "◆ "
 
 
 class HistoryPage(QWidget):
-    """版本历史页：两栏布局（快照列表 | 提交与对比）。."""
+    """版本历史面板：两栏布局（快照列表 | 提交与对比）。."""
 
     def __init__(
         self,
@@ -38,7 +38,7 @@ class HistoryPage(QWidget):
         history_ctrl: HistoryController,
         parent: QWidget | None = None,
     ) -> None:
-        """初始化页面并装配控制器信号。
+        """初始化面板并装配控制器信号。
 
         Args:
             theme: 主题管理器
@@ -58,14 +58,13 @@ class HistoryPage(QWidget):
         self._restore_ref = ""
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(SPACING_MD, SPACING_MD, SPACING_MD, SPACING_MD)
+        root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(SPACING_MD)
 
-        # ---------- 顶部工具栏 ----------
+        # ---------- 顶部工具栏（右对齐操作入口） ----------
         bar = QHBoxLayout()
         bar.setSpacing(SPACING_SM)
-        bar.addWidget(page_title("版本历史"))
-        bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据源页选择）"), stretch=1)
+        bar.addStretch(1)
         self._busy = busy_bar()
         bar.addWidget(self._busy)
         self._diff_btn = QPushButton("对比选中")

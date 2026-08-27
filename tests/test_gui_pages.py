@@ -28,49 +28,50 @@ def _show(window: Any, qapp: Any, page_id: str) -> Any:
     return window.pages[page_id]
 
 
-# ----------------------------- 数据源页 -----------------------------
+# ----------------------------- 数据页 -----------------------------
 
 
-def test_home_workspace_and_table_flow(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """数据源页联动：建工作区 → 导入 → 表列表点击加载预览。."""
-    window, _theme, ws, preview, *_rest = main_window
-    home = _show(window, qapp, "home")
+def test_data_workspace_and_table_flow(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
+    """数据页联动：建工作区 → 导入 → 表列表点击进入编辑。."""
+    window, _theme, ws, _preview, _clean, _merge, edit, *_rest = main_window
+    data = _show(window, qapp, "data")
 
-    ws.create_workspace("home-bind")
+    ws.create_workspace("data-bind")
     csv = _csv(tmp_path, "d.csv", "name,age\n甲,30\n乙,25\n")
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
     # 工作区卡片与表列表刷新
-    assert home._ws_list.count() == 1
-    assert home._table_list.count() == 1
-    assert home._table_list.item(0).text() == "d (2)"
-    # 点击表项加载前 200 行预览
-    home._on_table_clicked(home._table_list.item(0))
-    assert preview.table_name() == "d"
-    assert preview.preview_model().rowCount() == 2
-    assert home._preview_title.text() == "预览: d"
+    assert data._ws_list.count() == 1
+    assert data._table_list.count() == 1
+    assert data._table_list.item(0).text() == "d (2)"
+    # 点击表项在右侧编辑面板打开编辑会话
+    data._on_table_clicked(data._table_list.item(0))
+    qapp.processEvents()
+    assert edit.current_table() == "d"
+    assert edit.edit_model().rowCount() == 2
+    assert data._editor._view.isVisible()
     window.close()
 
 
-def test_home_new_and_delete_workspace_dialogs(
+def test_data_new_and_delete_workspace_dialogs(
     main_window: WindowFixture, monkeypatch: pytest.MonkeyPatch, qapp: Any
 ) -> None:
-    """数据源页对话框路径：新建工作区与删除确认。."""
+    """数据页对话框路径：新建工作区与删除确认。."""
     from PySide2.QtWidgets import QMessageBox
 
-    import finaldb.gui.widgets.pages.home_page as home_mod
+    import finaldb.gui.widgets.pages.data_page as data_mod
 
     window, _theme, ws, *_rest = main_window
-    home = _show(window, qapp, "home")
+    data = _show(window, qapp, "data")
 
     # 新建对话框输入名称
     def fake_get_text(*_args: object, **_kwargs: object) -> tuple[str, bool]:
         """伪造输入对话框返回值。."""
         return "dialog-ws", True
 
-    monkeypatch.setattr(home_mod.QInputDialog, "getText", staticmethod(fake_get_text))
-    home._on_new_workspace()
+    monkeypatch.setattr(data_mod.QInputDialog, "getText", staticmethod(fake_get_text))
+    data._on_new_workspace()
     assert ws.current_workspace() == "dialog-ws"
 
     # 删除确认选「是」
@@ -78,18 +79,18 @@ def test_home_new_and_delete_workspace_dialogs(
         """伪造确认对话框返回「是」。."""
         return QMessageBox.Yes
 
-    monkeypatch.setattr(home_mod.QMessageBox, "question", staticmethod(fake_question))
-    home._on_delete_workspace("dialog-ws")
+    monkeypatch.setattr(data_mod.QMessageBox, "question", staticmethod(fake_question))
+    data._on_delete_workspace("dialog-ws")
     assert ws.current_workspace() == ""
     window.close()
 
 
-def test_home_import_dialog_dispatches(main_window: WindowFixture, monkeypatch: pytest.MonkeyPatch, qapp: Any) -> None:
-    """数据源页导入对话框：选择文件后调用后台导入。."""
-    import finaldb.gui.widgets.pages.home_page as home_mod
+def test_data_import_dialog_dispatches(main_window: WindowFixture, monkeypatch: pytest.MonkeyPatch, qapp: Any) -> None:
+    """数据页导入对话框：选择文件后调用后台导入。."""
+    import finaldb.gui.widgets.pages.data_page as data_mod
 
     window, _theme, ws, *_rest = main_window
-    home = _show(window, qapp, "home")
+    data = _show(window, qapp, "data")
     ws.create_workspace("imp-ws")
 
     calls: list[str] = []
@@ -99,20 +100,20 @@ def test_home_import_dialog_dispatches(main_window: WindowFixture, monkeypatch: 
         """伪造文件选择对话框返回 x.csv。."""
         return "x.csv", ""
 
-    monkeypatch.setattr(home_mod.QFileDialog, "getOpenFileName", staticmethod(fake_open_file))
-    home._on_import()
+    monkeypatch.setattr(data_mod.QFileDialog, "getOpenFileName", staticmethod(fake_open_file))
+    data._on_import()
     assert calls == ["x.csv"]
     window.close()
 
 
-def test_home_import_error_shows_toast(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """数据源页导入失败经 error_raised 触发错误浮层。."""
+def test_data_import_error_shows_toast(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
+    """数据页导入失败经 error_raised 触发错误浮层。."""
     window, _theme, ws, *_rest = main_window
-    home = _show(window, qapp, "home")
+    data = _show(window, qapp, "data")
     ws.create_workspace("err-ws")
 
     errors: list[str] = []
-    home._toast.show_message = lambda msg, is_error=False: errors.append((msg, is_error))  # type: ignore[method-assign]
+    data._toast.show_message = lambda msg, is_error=False: errors.append((msg, is_error))  # type: ignore[method-assign]
     bad = _csv(tmp_path, "x.parquet", "junk")
     bad.write_bytes(b"junk")
     ws.import_file_sync(str(bad))
@@ -133,8 +134,8 @@ def test_clean_rule_flow(main_window: WindowFixture, tmp_path: Path, qapp: Any) 
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    # 切回数据源再切回本页触发重载（对齐用户导航流）
-    window.set_current_page("home")
+    # 切回数据页再切回本页触发重载（对齐用户导航流）
+    window.set_current_page("data")
     window.set_current_page("clean")
     qapp.processEvents()
     assert clean._table_combo.count() == 1
@@ -225,8 +226,8 @@ def test_merge_three_modes_flow(main_window: WindowFixture, tmp_path: Path, qapp
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    # 切回数据源再切回本页触发重载（对齐用户导航流）
-    window.set_current_page("home")
+    # 切回数据页再切回本页触发重载（对齐用户导航流）
+    window.set_current_page("data")
     window.set_current_page("merge")
     qapp.processEvents()
 
@@ -280,14 +281,22 @@ def test_merge_three_modes_flow(main_window: WindowFixture, tmp_path: Path, qapp
     window.close()
 
 
-# ----------------------------- 版本历史页 -----------------------------
+# ----------------------------- 统计与版本页 -----------------------------
+
+
+def _history_view(window: Any, qapp: Any) -> Any:
+    """切到统计与版本页的「版本历史」子视图并返回面板。."""
+    insights = _show(window, qapp, "insights")
+    insights._seg_buttons[1].click()
+    qapp.processEvents()
+    return insights._history_pane
 
 
 def test_history_pick_diff_restore(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """版本历史页联动：快照列表 → 点击选对比 → 双击设回滚 → 同步对比/回滚。."""
+    """版本历史面板联动：快照列表 → 点击选对比 → 双击设回滚 → 同步对比/回滚。."""
     window, _theme, ws, *_rest = main_window
-    history = window.pages["history"]
-    history_ctrl = window.pages["history"]._history
+    history = window.pages["insights"]._history_pane
+    history_ctrl = history._history
 
     ws.create_workspace("hist-bind")
     csv1 = _csv(tmp_path, "a.csv", "name,age\n甲,30\n乙,25\n")
@@ -296,7 +305,7 @@ def test_history_pick_diff_restore(main_window: WindowFixture, tmp_path: Path, q
     ws.import_file_sync(str(csv2))
     qapp.processEvents()
 
-    history = _show(window, qapp, "history")
+    history = _history_view(window, qapp)
     assert history._snap_list.count() == 2
     model = history_ctrl.snapshots_model()
     older = model.snapshot_at(1)
@@ -341,9 +350,9 @@ def test_history_pick_diff_restore(main_window: WindowFixture, tmp_path: Path, q
 
 
 def test_history_commit_via_page(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """版本历史页提交入口：输入说明发起提交并刷新列表。."""
+    """版本历史面板提交入口：输入说明发起提交并刷新列表。."""
     window, _theme, ws, *_rest = main_window
-    history = window.pages["history"]
+    history = window.pages["insights"]._history_pane
     history_ctrl = history._history
 
     ws.create_workspace("commit-bind")
@@ -351,7 +360,7 @@ def test_history_commit_via_page(main_window: WindowFixture, tmp_path: Path, qap
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    history = _show(window, qapp, "history")
+    history = _history_view(window, qapp)
     assert history._snap_list.count() == 1
     # 修改数据后经页面入口提交新快照
     from finaldb.core.storage.database import connect
@@ -367,20 +376,21 @@ def test_history_commit_via_page(main_window: WindowFixture, tmp_path: Path, qap
     window.close()
 
 
-# ----------------------------- 统计页 -----------------------------
+# ----------------------------- 统计面板 -----------------------------
 
 
 def test_stats_summary_and_bars(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
-    """统计页联动：摘要文本与条形图行随导入刷新。."""
+    """统计面板联动：摘要文本与条形图行随导入刷新。."""
     window, _theme, ws, *_rest = main_window
-    stats_page = window.pages["stats"]
+    stats_page = window.pages["insights"]._stats_pane
 
     ws.create_workspace("stats-bind")
     csv = _csv(tmp_path, "s.csv", "name,age\n甲,30\n乙,25\n丙,\n")
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    stats_page = _show(window, qapp, "stats")
+    # insights 页默认显示统计子视图（showEvent 触发刷新）
+    _show(window, qapp, "insights")
     assert stats_page._summary.text() == "共 1 张表，3 行数据"
     assert len(stats_page._bars) == 1
     # 主题切换联动条形颜色

@@ -1,4 +1,4 @@
-"""统计页：工作区表分布概览与条形图。."""
+"""统计面板：工作区表分布概览与条形图（嵌入统计与版本页）。."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from PySide2.QtWidgets import (
 
 from finaldb.gui.controllers.stats_controller import StatsController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
-from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
-from finaldb.gui.widgets.common import caption_label, card, page_title, workspace_hint
+from finaldb.gui.theme import SPACING_SM, ThemeManager
+from finaldb.gui.widgets.common import caption_label, card
 
 __all__ = ["StatsPage"]
 
@@ -26,7 +26,7 @@ _BAR_MIN_WIDTH = 4
 
 
 class StatsPage(QWidget):
-    """统计页：摘要 + 表行数分布条形图（滚动容器）。."""
+    """统计面板：摘要 + 表行数分布条形图（滚动容器）。."""
 
     def __init__(
         self,
@@ -35,7 +35,7 @@ class StatsPage(QWidget):
         stats_ctrl: StatsController,
         parent: QWidget | None = None,
     ) -> None:
-        """初始化页面并装配控制器信号。
+        """初始化面板并装配控制器信号。
 
         Args:
             theme: 主题管理器
@@ -50,14 +50,13 @@ class StatsPage(QWidget):
         self._bars: list[QWidget] = []
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(SPACING_MD, SPACING_MD, SPACING_MD, SPACING_MD)
-        root.setSpacing(SPACING_MD)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(SPACING_SM)
 
-        # ---------- 顶部工具栏 ----------
+        # ---------- 顶部工具栏（右对齐刷新入口） ----------
         bar = QHBoxLayout()
         bar.setSpacing(SPACING_SM)
-        bar.addWidget(page_title("统计"))
-        bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据源页选择）"), stretch=1)
+        bar.addStretch(1)
         refresh_btn = QPushButton("刷新")
         refresh_btn.clicked.connect(lambda: self._stats.load_stats(self._ws.current_workspace_path()))
         bar.addWidget(refresh_btn)

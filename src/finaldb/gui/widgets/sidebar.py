@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide2.QtCore import Qt, Signal
-from PySide2.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide2.QtWidgets import QButtonGroup, QCheckBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from finaldb.gui.theme import SIDEBAR_WIDTH, SPACING_SM, ThemeManager
 
@@ -11,14 +11,12 @@ __all__ = ["NavButton", "Sidebar"]
 
 # 导航项定义：(page_id, badge 字符, 标签)
 _MAIN_NAV = [
-    ("home", "源", "数据源"),
+    ("data", "数", "数据"),
     ("clean", "整", "数据整理"),
     ("merge", "合", "合并去重"),
-    ("edit", "编", "数据编辑"),
-    ("history", "版", "版本历史"),
 ]
 _AUX_NAV = [
-    ("stats", "统", "统计"),
+    ("insights", "察", "统计与版本"),
     ("settings", "设", "设置"),
     ("about", "关", "关于"),
 ]
@@ -80,6 +78,9 @@ class Sidebar(QFrame):
         self.setObjectName("sidebarPanel")
         self.setFixedWidth(SIDEBAR_WIDTH)
         self._buttons: dict[str, NavButton] = {}
+        # 互斥按钮组：切换选中时自动取消其余按钮，避免激活态残留
+        self._group = QButtonGroup(self)
+        self._group.setExclusive(True)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -96,12 +97,12 @@ class Sidebar(QFrame):
             root.addWidget(self._make_nav(page_id, badge, text))
 
         root.addWidget(self._build_dark_row())
-        self._buttons["home"].setChecked(True)
+        self._buttons["data"].setChecked(True)
 
     # ----------------------------- 对外 API -----------------------------
 
     def set_current_page(self, page_id: str) -> None:
-        """同步导航选中态（不触发页面切换，由主窗口调用）。."""
+        """同步导航选中态（互斥组自动清除其余按钮，由主窗口调用）。."""
         button = self._buttons.get(page_id)
         if button is not None:
             button.setChecked(True)
@@ -112,6 +113,7 @@ class Sidebar(QFrame):
         """构造一个导航按钮并接入点击信号。."""
         button = NavButton(page_id, badge, text, self._theme)
         self._buttons[page_id] = button
+        self._group.addButton(button)
         button.clicked.connect(lambda: self.page_requested.emit(page_id))  # pyrefly: ignore [missing-attribute]
         return button
 

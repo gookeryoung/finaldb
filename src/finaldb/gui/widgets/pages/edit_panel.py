@@ -1,12 +1,15 @@
-"""数据编辑页：表选择 + 可编辑表格 + 行列操作 + 分页 + 撤销重做。."""
+"""数据编辑面板：可编辑表格 + 行列操作 + 分页 + 撤销重做。
+
+作为数据页的右侧面板嵌入：表选择由外部（数据页表列表）驱动，
+面板只负责编辑会话的展示与命令入口。
+"""
 
 from __future__ import annotations
 
 from PySide2.QtCore import Qt
-from PySide2.QtGui import QKeySequence, QShowEvent
+from PySide2.QtGui import QKeySequence
 from PySide2.QtWidgets import (
     QApplication,
-    QComboBox,
     QFrame,
     QHBoxLayout,
     QInputDialog,
@@ -19,12 +22,11 @@ from PySide2.QtWidgets import (
 )
 
 from finaldb.gui.controllers.editing_controller import EditingController
-from finaldb.gui.controllers.workspace_controller import WorkspaceController
-from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
-from finaldb.gui.widgets.common import caption_label, card, page_title, workspace_hint
+from finaldb.gui.theme import SPACING_SM, ThemeManager
+from finaldb.gui.widgets.common import caption_label, card
 from finaldb.gui.widgets.toast import Toast
 
-__all__ = ["EditPage"]
+__all__ = ["EditPanel"]
 
 
 def _tool_button(text: str, tip: str, variant: str = "secondary") -> QPushButton:
@@ -53,51 +55,34 @@ def _tool_separator() -> QFrame:
     return line
 
 
-class EditPage(QWidget):
-    """数据编辑页：工具栏（表/撤销/行列操作）+ 编辑表格 + 分页条。."""
+class EditPanel(QWidget):
+    """数据编辑面板：工具栏（撤销/行列操作）+ 编辑表格 + 分页条。."""
 
     def __init__(
         self,
         theme: ThemeManager,
-        workspace_ctrl: WorkspaceController,
         editing_ctrl: EditingController,
         parent: QWidget | None = None,
     ) -> None:
-        """初始化页面并装配控制器信号。
+        """初始化面板并装配控制器信号。
 
         Args:
             theme: 主题管理器
-            workspace_ctrl: 工作区控制器
             editing_ctrl: 编辑控制器
             parent: 父部件
         """
         super().__init__(parent)
         self._theme = theme
-        self._ws = workspace_ctrl
         self._edit = editing_ctrl
         self._toast = Toast(self, theme)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(SPACING_MD, SPACING_MD, SPACING_MD, SPACING_MD)
-        root.setSpacing(SPACING_MD)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(SPACING_SM)
 
-        # ---------- 顶部工具栏 ----------
-        bar = QHBoxLayout()
-        bar.setSpacing(SPACING_SM)
-        bar.addWidget(page_title("数据编辑"))
-        bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据源页选择）"), stretch=1)
-        root.addLayout(bar)
-
-        # ---------- 工具行：表选择 | 撤销重做 | 行操作 | 列操作 | 危险操作 ----------
+        # ---------- 工具行：撤销重做 | 行操作 | 列操作 | 危险操作 ----------
         tools = QHBoxLayout()
         tools.setSpacing(SPACING_SM)
-        tools.addWidget(caption_label("数据表"))
-        self._table_combo = QComboBox()
-        self._table_combo.setMinimumWidth(180)
-        self._table_combo.activated.connect(self._on_table_activated)
-        tools.addWidget(self._table_combo)
-
-        tools.addWidget(_tool_separator())
 
         self._undo_btn = _tool_button("撤销", "撤销上一步编辑")
         self._undo_btn.clicked.connect(self._edit.undo)
@@ -148,7 +133,7 @@ class EditPage(QWidget):
         self._view.verticalHeader().setVisible(True)
         self._view.horizontalHeader().setStretchLastSection(True)
         body_layout.addWidget(self._view)
-        self._empty = caption_label("选择数据表后开始编辑")
+        self._empty = caption_label("选择左侧数据表后开始编辑")
         self._empty.setObjectName("editEmpty")
         self._empty.setAlignment(Qt.AlignCenter)
         self._empty.setMinimumHeight(200)
@@ -173,75 +158,31 @@ class EditPage(QWidget):
         root.addLayout(pager)
 
         # ---------- 信号装配 ----------
-        self._edit.tables_model().modelReset.connect(self._on_tables_reset)
         self._edit.table_loaded.connect(self._on_table_loaded)  # pyrefly: ignore [missing-attribute]
         self._edit.undo_changed.connect(self._update_actions)  # pyrefly: ignore [missing-attribute]
         self._edit.error_raised.connect(self._toast.show_error)  # pyrefly: ignore [missing-attribute]
-        self._ws.current_changed.connect(self._on_workspace_changed)  # pyrefly: ignore [missing-attribute]
         # 模型整页重载（撤销/结构变化）时保持视图选中（行列操作连续进行）
         edit_model = self._edit.edit_model()
         edit_model.modelAboutToBeReset.connect(self._save_selection)
         edit_model.modelReset.connect(self._restore_selection)
 
         self._saved_selection: tuple[int, int] | None = None
-        self._on_workspace_changed()
+        self._on_table_loaded()
+        self._update_actions()
 
         # Ctrl+C 复制选区为 TSV 文本（可直接粘贴到 Excel/文本编辑器）
         self._copy_shortcut = QShortcut(QKeySequence.Copy, self._view)
         self._copy_shortcut.activated.connect(self._on_copy)
 
-    # ----------------------------- 工作区与表 -----------------------------
+    # ----------------------------- 对外 API -----------------------------
 
-    def _on_workspace_changed(self) -> None:
-        """工作区切换：重载表列表。."""
-        self._edit.load_tables(self._ws.current_workspace_path())
-        self._on_tables_reset()
+    def open_table(self, table: str) -> None:
+        """打开指定表进入编辑会话（表由数据页表列表选择）。."""
+        self._edit.open_table(table)
 
-    def showEvent(self, event: QShowEvent) -> None:
-        """页面可见时重载表列表（对齐 QML onVisibleChanged）。."""
-        super().showEvent(event)
-        if self._ws.current_workspace_path():
-            self._edit.load_tables(self._ws.current_workspace_path())
-            self._on_tables_reset()
-
-    def _on_tables_reset(self) -> None:
-        """表列表重置：刷新下拉并校准当前选择。."""
-        model = self._edit.tables_model()
-        tables = [model.table_at(row) or "" for row in range(model.rowCount())]
-        self._table_combo.blockSignals(True)
-        self._table_combo.clear()
-        self._table_combo.addItems(tables)
-        current = self._edit.current_table()
-        if current in tables:
-            self._table_combo.setCurrentText(current)
-        self._table_combo.blockSignals(False)
-        if current and current not in tables:
-            # 当前表已不存在（如被删除）
-            self._table_combo.blockSignals(True)
-            self._table_combo.setCurrentIndex(-1)
-            self._table_combo.blockSignals(False)
-        self._update_actions()
-
-    def _on_table_activated(self, index: int) -> None:
-        """选择数据表进入编辑。."""
-        table = self._table_combo.itemText(index)
-        if table:
-            self._edit.open_table(table)
-
-    def _on_table_loaded(self) -> None:
-        """表数据重载：刷新分页信息与空态。."""
-        has_table = self._edit.has_table()
-        self._view.setVisible(has_table)
-        self._empty.setVisible(not has_table)
-        if has_table:
-            from finaldb.core.editing.service import PAGE_SIZE
-
-            total = self._edit.total_rows()
-            pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-            self._page_label.setText(f"第 {self._edit.current_page() + 1}/{pages} 页 · 共 {total} 行")
-        else:
-            self._page_label.setText("")
-        self._update_actions()
+    def refresh_tables(self, workspace_path: str) -> None:
+        """重载工作区表列表（工作区切换/导入后调用）。."""
+        self._edit.load_tables(workspace_path)
 
     # ----------------------------- 行操作 -----------------------------
 
@@ -371,6 +312,21 @@ class EditPage(QWidget):
         self._edit.goto_page(self._edit.current_page() + 1)
 
     # ----------------------------- 状态 -----------------------------
+
+    def _on_table_loaded(self) -> None:
+        """表数据重载：刷新分页信息与空态。."""
+        has_table = self._edit.has_table()
+        self._view.setVisible(has_table)
+        self._empty.setVisible(not has_table)
+        if has_table:
+            from finaldb.core.editing.service import PAGE_SIZE
+
+            total = self._edit.total_rows()
+            pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+            self._page_label.setText(f"第 {self._edit.current_page() + 1}/{pages} 页 · 共 {total} 行")
+        else:
+            self._page_label.setText("")
+        self._update_actions()
 
     def _update_actions(self) -> None:
         """按会话状态刷新按钮可用态与撤销重做提示。."""

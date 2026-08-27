@@ -13,7 +13,7 @@ from finaldb.gui.models.stats_model import TableStatModel
 __all__ = ["StatsController"]
 
 # 未选择工作区时的摘要文案
-_EMPTY_SUMMARY = "未选择工作区（请先在数据源页选择）"
+_EMPTY_SUMMARY = "未选择工作区（请先在数据页选择）"
 
 
 class StatsController(QObject):

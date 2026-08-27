@@ -1,9 +1,13 @@
-"""数据源页：工作区管理 + 数据导入 + 表预览。."""
+"""数据页：工作区管理 + 数据导入 + 表列表 + 编辑面板。
+
+整合原数据源页与数据编辑页：左侧选择工作区与表，
+右侧直接编辑选中表，消除重复的表选择入口。
+"""
 
 from __future__ import annotations
 
 from PySide2.QtCore import QSize, Qt, Signal
-from PySide2.QtGui import QFont, QMouseEvent
+from PySide2.QtGui import QFont, QMouseEvent, QShowEvent
 from PySide2.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -13,21 +17,21 @@ from PySide2.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
-    QTableView,
     QVBoxLayout,
     QWidget,
 )
 
-from finaldb.gui.controllers.preview_controller import PreviewController
+from finaldb.gui.controllers.editing_controller import EditingController
 from finaldb.gui.controllers.workspace_controller import (
     WorkspaceController,
     format_timestamp,
 )
 from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
 from finaldb.gui.widgets.common import busy_bar, card, page_title, workspace_hint
+from finaldb.gui.widgets.pages.edit_panel import EditPanel
 from finaldb.gui.widgets.toast import Toast
 
-__all__ = ["HomePage"]
+__all__ = ["DataPage"]
 
 # 导入文件选择器的名称过滤器
 _IMPORT_FILTER = "数据文件 (*.csv *.tsv *.xlsx *.xlsm *.json *.ndjson);;所有文件 (*)"
@@ -77,14 +81,14 @@ class _WorkspaceCard(QWidget):
         super().mousePressEvent(event)
 
 
-class HomePage(QWidget):
-    """数据源页：三栏布局（工作区列表 | 表列表 | 数据预览）。."""
+class DataPage(QWidget):
+    """数据页：三栏布局（工作区列表 | 表列表 | 编辑面板）。."""
 
     def __init__(
         self,
         theme: ThemeManager,
         workspace_ctrl: WorkspaceController,
-        preview_ctrl: PreviewController,
+        editing_ctrl: EditingController,
         parent: QWidget | None = None,
     ) -> None:
         """初始化页面并装配控制器信号。
@@ -92,13 +96,13 @@ class HomePage(QWidget):
         Args:
             theme: 主题管理器
             workspace_ctrl: 工作区控制器
-            preview_ctrl: 表预览控制器
+            editing_ctrl: 编辑控制器
             parent: 父部件
         """
         super().__init__(parent)
         self._theme = theme
         self._ws = workspace_ctrl
-        self._preview = preview_ctrl
+        self._edit = editing_ctrl
         self._toast = Toast(self, theme)
 
         root = QVBoxLayout(self)
@@ -108,7 +112,7 @@ class HomePage(QWidget):
         # ---------- 顶部工具栏 ----------
         bar = QHBoxLayout()
         bar.setSpacing(SPACING_SM)
-        bar.addWidget(page_title("数据源"))
+        bar.addWidget(page_title("数据"))
         bar.addWidget(workspace_hint(theme, workspace_ctrl), stretch=1)
         self._busy = busy_bar()
         bar.addWidget(self._busy)
@@ -157,27 +161,9 @@ class HomePage(QWidget):
         table_layout.addWidget(self._table_empty)
         body.addWidget(table_card)
 
-        # 数据预览面板
-        preview_card = card()
-        preview_layout = QVBoxLayout(preview_card)
-        preview_layout.setContentsMargins(12, 12, 12, 12)
-        preview_layout.setSpacing(SPACING_SM)
-        self._preview_title = QLabel("数据预览")
-        self._preview_title.setProperty("heading", True)
-        preview_layout.addWidget(self._preview_title)
-        self._preview_view = QTableView()
-        self._preview_view.setObjectName("previewView")
-        self._preview_view.setModel(self._preview.preview_model())
-        self._preview_view.setEditTriggers(QTableView.NoEditTriggers)
-        self._preview_view.setAlternatingRowColors(True)
-        self._preview_view.verticalHeader().setVisible(False)
-        preview_layout.addWidget(self._preview_view)
-        self._preview_empty = QLabel("选择左侧数据表查看前 200 行")
-        self._preview_empty.setProperty("secondary", True)
-        self._preview_empty.setAlignment(Qt.AlignCenter)
-        self._preview_empty.setWordWrap(True)
-        preview_layout.addWidget(self._preview_empty)
-        body.addWidget(preview_card, stretch=1)
+        # 编辑面板（表由左侧列表选择，点击即在原地编辑）
+        self._editor = EditPanel(theme, editing_ctrl)
+        body.addWidget(self._editor, stretch=1)
 
         root.addLayout(body, stretch=1)
 
@@ -190,13 +176,16 @@ class HomePage(QWidget):
         self._ws.import_finished.connect(self._toast.show_message)  # pyrefly: ignore [missing-attribute]
         self._ws.import_failed.connect(self._toast.show_error)  # pyrefly: ignore [missing-attribute]
         self._ws.error_raised.connect(self._toast.show_error)  # pyrefly: ignore [missing-attribute]
-        self._preview.table_changed.connect(self._update_preview_state)  # pyrefly: ignore [missing-attribute]
 
         self._refresh_workspaces()
         self._on_workspace_changed()
-        self._update_preview_state()
 
     # ----------------------------- 工作区 -----------------------------
+
+    def showEvent(self, event: QShowEvent) -> None:
+        """页面可见时重载表列表与编辑会话。."""
+        super().showEvent(event)
+        self._on_workspace_changed()
 
     def _refresh_workspaces(self) -> None:
         """按工作区模型重建卡片列表。."""
@@ -217,9 +206,8 @@ class HomePage(QWidget):
         self._ws_empty.setVisible(model.rowCount() == 0)
 
     def _on_select_workspace(self, name: str) -> None:
-        """点击工作区卡片：选中并清空预览。."""
+        """点击工作区卡片：选中并重载表列表。."""
         self._ws.select_workspace(name)
-        self._preview.clear()
 
     def _on_delete_workspace(self, name: str) -> None:
         """点击 ✕：确认后删除工作区。."""
@@ -246,11 +234,12 @@ class HomePage(QWidget):
             self._ws.import_file(path)
 
     def _on_workspace_changed(self) -> None:
-        """当前工作区切换：刷新表列表与按钮状态。."""
+        """当前工作区切换：刷新表列表、编辑面板与按钮状态。."""
         self._refresh_tables()
+        self._editor.refresh_tables(self._ws.current_workspace_path())
         self._update_actions()
 
-    # ----------------------------- 表与预览 -----------------------------
+    # ----------------------------- 表与编辑 -----------------------------
 
     def _refresh_tables(self) -> None:
         """按表模型重建表列表。."""
@@ -269,17 +258,10 @@ class HomePage(QWidget):
         self._table_empty.setVisible(not has_tables)
 
     def _on_table_clicked(self, item: QListWidgetItem) -> None:
-        """点击表项：加载前 200 行预览。."""
+        """点击表项：在右侧编辑面板中打开该表。."""
         name = str(item.data(Qt.UserRole) or "")
         if name:
-            self._preview.load_table(self._ws.current_workspace_path(), name)
-
-    def _update_preview_state(self) -> None:
-        """按预览控制器状态切换标题与占位提示。."""
-        name = self._preview.table_name()
-        self._preview_title.setText(f"预览: {name}" if name else "数据预览")
-        self._preview_view.setVisible(name != "")
-        self._preview_empty.setVisible(name == "")
+            self._editor.open_table(name)
 
     # ----------------------------- 状态 -----------------------------
 

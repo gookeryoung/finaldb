@@ -194,16 +194,17 @@ def test_edit_page_dialog_early_returns(
     main_window: WindowFixture, tmp_path: Path, qapp: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """无选中列/取消对话框的各早退分支不产生编辑。"""
-    import finaldb.gui.widgets.pages.edit_page as edit_mod
+    import finaldb.gui.widgets.pages.edit_panel as edit_mod
 
     window, _theme, ws, *_rest = main_window
     window.show()
     ws.create_workspace("edge-ws")
     ws.import_file_sync(str(_csv(tmp_path, "d.csv", "name,age\n甲,30\n")))
     qapp.processEvents()
-    window.set_current_page("edit")
+    window.set_current_page("data")
     qapp.processEvents()
-    page = window.pages["edit"]
+    data = window.pages["data"]
+    page = data._editor
 
     # 未开表时加列/删行/重命名/删列/翻页全部安全无操作
     page._on_add_row()
@@ -214,7 +215,7 @@ def test_edit_page_dialog_early_returns(
     page._on_prev_page()
     page._on_next_page()
 
-    page._on_table_activated(0)
+    data._on_table_clicked(data._table_list.item(0))
     qapp.processEvents()
 
     # 已开表但未选中列：重命名/删列提示
@@ -226,10 +227,10 @@ def test_edit_page_dialog_early_returns(
     page._on_add_column()
     page._on_rename_column()
     qapp.processEvents()
-    assert page._edit.edit_model().columnCount() == 2
+    assert data._edit.edit_model().columnCount() == 2
 
     # 选中列后取消重命名与删列确认
-    page._view.setCurrentIndex(page._edit.edit_model().index(0, 0))
+    page._view.setCurrentIndex(data._edit.edit_model().index(0, 0))
     monkeypatch.setattr(edit_mod.QInputDialog, "getText", staticmethod(_dialog_same_name))
     page._on_rename_column()  # 同名早退
     from PySide2.QtWidgets import QMessageBox
@@ -240,7 +241,7 @@ def test_edit_page_dialog_early_returns(
     monkeypatch.setattr(edit_mod.QMessageBox, "question", staticmethod(_answer_no))
     page._on_drop_column()  # 确认「否」早退
     qapp.processEvents()
-    assert page._edit.edit_model().columnCount() == 2
+    assert data._edit.edit_model().columnCount() == 2
     window.close()
 
 
@@ -248,10 +249,10 @@ def test_edit_page_show_without_workspace(main_window: WindowFixture, qapp: Any)
     """无工作区时页面显示不崩溃。"""
     window, *_rest = main_window
     window.show()
-    window.set_current_page("edit")
+    window.set_current_page("data")
     qapp.processEvents()
-    page = window.pages["edit"]
+    page = window.pages["data"]
     page.showEvent(None)  # type: ignore[arg-type]  # 直接调用以覆盖空工作区分支
     qapp.processEvents()
-    assert page._table_combo.count() == 0
+    assert page._table_list.count() == 0
     window.close()

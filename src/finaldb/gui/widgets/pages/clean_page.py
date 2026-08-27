@@ -92,7 +92,7 @@ class CleanPage(QWidget):
         bar = QHBoxLayout()
         bar.setSpacing(SPACING_SM)
         bar.addWidget(page_title("数据整理"))
-        bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据源页选择）"), stretch=1)
+        bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据页选择）"), stretch=1)
         self._busy = busy_bar()
         bar.addWidget(self._busy)
         self._preview_btn = QPushButton("预览效果")

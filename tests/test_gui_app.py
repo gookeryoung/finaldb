@@ -37,7 +37,7 @@ def test_apply_theme(qapp: object) -> None:
 
 
 def test_create_app_assembles_window(qapp: object) -> None:
-    """create_app 应返回 (应用, 主窗口, 主题) 且默认浅色停在数据源页。."""
+    """create_app 应返回 (应用, 主窗口, 主题) 且默认浅色停在数据页。."""
     from PySide2.QtWidgets import QApplication
 
     from finaldb.app import create_app
@@ -47,8 +47,8 @@ def test_create_app_assembles_window(qapp: object) -> None:
     assert window is not None
     assert theme is not None
     assert theme.is_dark() is False
-    assert window.current_page() == "home"
-    assert window.stack.count() == 8
+    assert window.current_page() == "data"
+    assert window.stack.count() == 6
 
 
 def test_create_app_theme_change_rebuilds_qss(qapp: object) -> None:

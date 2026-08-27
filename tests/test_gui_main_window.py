@@ -14,12 +14,12 @@ pytestmark = pytest.mark.gui
 WindowFixture = Tuple[Any, ...]  # noqa: UP006  # 3.8 运行时下标兼容
 
 
-def test_window_assembles_eight_pages(main_window: WindowFixture) -> None:
-    """主窗口装配八页且默认停在数据源页。."""
+def test_window_assembles_six_pages(main_window: WindowFixture) -> None:
+    """主窗口装配六页且默认停在数据页。."""
     window, *_rest = main_window
-    assert window.stack.count() == len(PAGE_ORDER) == 8
+    assert window.stack.count() == len(PAGE_ORDER) == 6
     assert set(window.pages) == set(PAGE_ORDER)
-    assert window.current_page() == "home"
+    assert window.current_page() == "data"
 
 
 def test_set_current_page_roundtrip(main_window: WindowFixture) -> None:
@@ -33,12 +33,14 @@ def test_set_current_page_roundtrip(main_window: WindowFixture) -> None:
 
 
 def test_sidebar_button_switches_page(main_window: WindowFixture) -> None:
-    """点击侧边栏导航按钮触发页面切换并保持选中态。."""
+    """点击侧边栏导航按钮触发页面切换并保持选中态（其余按钮取消选中）。."""
     window, *_rest = main_window
     button = window.sidebar._buttons["clean"]
     button.click()
     assert window.current_page() == "clean"
     assert button.isChecked()
+    # 互斥组：旧页按钮激活态被清除，不残留
+    assert not window.sidebar._buttons["data"].isChecked()
 
 
 def test_toggle_sidebar(main_window: WindowFixture, qapp: Any) -> None:
@@ -68,7 +70,7 @@ def test_sidebar_dark_toggle_switches_theme(main_window: WindowFixture, qapp: An
     check.setChecked(True)
     qapp.processEvents()
     assert theme.is_dark() is True
-    badge = window.sidebar._buttons["home"]._badge
+    badge = window.sidebar._buttons["data"]._badge
     assert "#7AA2F7" in badge.styleSheet()
     check.setChecked(False)
     assert theme.is_dark() is False

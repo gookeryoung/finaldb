@@ -1,4 +1,4 @@
-"""数据编辑页测试：表打开、单元格编辑、行列操作、撤销重做、分页。."""
+"""数据页编辑面板测试：表打开、单元格编辑、行列操作、撤销重做、分页。."""
 
 from __future__ import annotations
 
@@ -21,15 +21,23 @@ def _csv(tmp_path: Path, name: str, content: str) -> Path:
 
 
 def _setup(main_window: WindowFixture, tmp_path: Path, qapp: Any, rows: str = "name,age\n甲,30\n乙,25\n") -> Any:
-    """建工作区导入表并打开编辑页。."""
+    """建工作区导入表并打开数据页（返回页面与编辑面板）。."""
     window, _theme, ws, *_rest = main_window
     window.show()
     ws.create_workspace("edit-ws")
     ws.import_file_sync(str(_csv(tmp_path, "d.csv", rows)))
     qapp.processEvents()
-    window.set_current_page("edit")
+    window.set_current_page("data")
     qapp.processEvents()
-    return window, window.pages["edit"]
+    page = window.pages["data"]
+    return page, page._editor
+
+
+def _open_table(page: Any, qapp: Any) -> Any:
+    """点击表列表首项打开编辑会话（返回编辑面板）。."""
+    page._on_table_clicked(page._table_list.item(0))
+    qapp.processEvents()
+    return page._editor
 
 
 # ----------------------------- 会话与单元格 -----------------------------
@@ -38,17 +46,16 @@ def _setup(main_window: WindowFixture, tmp_path: Path, qapp: Any, rows: str = "n
 def test_open_table_and_edit_cell(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
     """打开表 → 编辑单元格 → 落库并支持撤销。."""
     window, *_rest = main_window
-    page = _setup(main_window, tmp_path, qapp)[1]
+    page = _setup(main_window, tmp_path, qapp)[0]
 
-    # 表下拉出现导入的表
-    assert page._table_combo.count() == 1
-    assert page._table_combo.itemText(0) == "d"
-    assert not page._view.isVisible()
+    # 表列表出现导入的表，未选择时编辑视图隐藏
+    assert page._table_list.count() == 1
+    assert page._table_list.item(0).text().startswith("d")
+    assert not page._editor._view.isVisible()
 
-    page._on_table_activated(0)
-    qapp.processEvents()
+    editor = _open_table(page, qapp)
     assert page._edit.current_table() == "d"
-    assert page._view.isVisible()
+    assert editor._view.isVisible()
     assert page._edit.edit_model().rowCount() == 2
 
     # 编辑单元格（模型 setData 委托控制器落库）
@@ -68,9 +75,8 @@ def test_open_table_and_edit_cell(main_window: WindowFixture, tmp_path: Path, qa
 def test_edit_cell_bad_value_shows_error(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
     """INTEGER 列输入非法文本：编辑被拒并提示错误。."""
     window, *_theme_ws = main_window
-    page = _setup(main_window, tmp_path, qapp)[1]
-    page._on_table_activated(0)
-    qapp.processEvents()
+    page = _setup(main_window, tmp_path, qapp)[0]
+    _open_table(page, qapp)
 
     errors: list[str] = []
     page._edit.error_raised.connect(errors.append)
@@ -87,9 +93,8 @@ def test_edit_cell_bad_value_shows_error(main_window: WindowFixture, tmp_path: P
 def test_row_and_column_operations(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
     """加行/删行/加列/重命名/删列全流程（含撤销）。."""
     window, *_rest = main_window
-    page = _setup(main_window, tmp_path, qapp)[1]
-    page._on_table_activated(0)
-    qapp.processEvents()
+    page = _setup(main_window, tmp_path, qapp)[0]
+    editor = _open_table(page, qapp)
     edit = page._edit
 
     # 加行
@@ -98,7 +103,7 @@ def test_row_and_column_operations(main_window: WindowFixture, tmp_path: Path, q
     assert edit.total_rows() == 3
 
     # 删行（选中第一行）
-    view = page._view
+    view = editor._view
     view.selectRow(0)
     rowids = edit.edit_model().rowids_of([0])
     assert len(rowids) == 1
@@ -133,32 +138,31 @@ def test_column_dialogs_dispatch(
     """加列/重命名对话框路径（monkeypatch 静态方法）。."""
     from PySide2.QtWidgets import QMessageBox
 
-    import finaldb.gui.widgets.pages.edit_page as edit_mod
+    import finaldb.gui.widgets.pages.edit_panel as panel_mod
 
     window, *_rest = main_window
-    page = _setup(main_window, tmp_path, qapp)[1]
-    page._on_table_activated(0)
-    qapp.processEvents()
+    page = _setup(main_window, tmp_path, qapp)[0]
+    editor = _open_table(page, qapp)
 
     def fake_get_text(*_args: object, **_kwargs: object) -> tuple[str, bool]:
         """伪造输入对话框：新增列名 extra。."""
         return "extra", True
 
-    monkeypatch.setattr(edit_mod.QInputDialog, "getText", staticmethod(fake_get_text))
-    page._on_add_column()
+    monkeypatch.setattr(panel_mod.QInputDialog, "getText", staticmethod(fake_get_text))
+    editor._on_add_column()
     qapp.processEvents()
     assert page._edit.edit_model().columnCount() == 3
 
     # 选中 extra 列后重命名
-    view = page._view
+    view = editor._view
     view.setCurrentIndex(page._edit.edit_model().index(0, 2))
 
     def fake_rename_text(*_args: object, **_kwargs: object) -> tuple[str, bool]:
         """伪造输入对话框：重命名为 renamed。."""
         return "renamed", True
 
-    monkeypatch.setattr(edit_mod.QInputDialog, "getText", staticmethod(fake_rename_text))
-    page._on_rename_column()
+    monkeypatch.setattr(panel_mod.QInputDialog, "getText", staticmethod(fake_rename_text))
+    editor._on_rename_column()
     qapp.processEvents()
     assert page._edit.edit_model().headerData(2, 0x1) == "renamed"
 
@@ -167,8 +171,8 @@ def test_column_dialogs_dispatch(
         return QMessageBox.Yes
 
     # 确认删列
-    monkeypatch.setattr(edit_mod.QMessageBox, "question", staticmethod(fake_question))
-    page._on_drop_column()
+    monkeypatch.setattr(panel_mod.QMessageBox, "question", staticmethod(fake_question))
+    editor._on_drop_column()
     qapp.processEvents()
     assert page._edit.edit_model().columnCount() == 2
     window.close()
@@ -177,11 +181,10 @@ def test_column_dialogs_dispatch(
 def test_delete_rows_requires_selection(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> None:
     """未选中行点删行：提示不删除。"""
     window, *_rest = main_window
-    page = _setup(main_window, tmp_path, qapp)[1]
-    page._on_table_activated(0)
-    qapp.processEvents()
+    page = _setup(main_window, tmp_path, qapp)[0]
+    editor = _open_table(page, qapp)
     total_before = page._edit.total_rows()
-    page._on_delete_rows()
+    editor._on_delete_rows()
     qapp.processEvents()
     assert page._edit.total_rows() == total_before
     window.close()
@@ -194,21 +197,20 @@ def test_pagination(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> No
     """250 行数据分页：页码、上一页/下一页可用态。."""
     rows = "id\n" + "\n".join(str(i) for i in range(250)) + "\n"
     window, *_rest = main_window
-    page = _setup(main_window, tmp_path, qapp, rows)[1]
-    page._on_table_activated(0)
-    qapp.processEvents()
+    page = _setup(main_window, tmp_path, qapp, rows)[0]
+    editor = _open_table(page, qapp)
     edit = page._edit
 
     assert edit.current_page() == 0
     assert edit.total_rows() == 250
-    assert page._page_label.text().startswith("第 1/3 页")
-    assert not page._prev_btn.isEnabled()
-    assert page._next_btn.isEnabled()
+    assert editor._page_label.text().startswith("第 1/3 页")
+    assert not editor._prev_btn.isEnabled()
+    assert editor._next_btn.isEnabled()
 
-    page._on_next_page()
+    editor._on_next_page()
     qapp.processEvents()
     assert edit.current_page() == 1
-    assert page._prev_btn.isEnabled()
+    assert editor._prev_btn.isEnabled()
     # 第 2 页首行 id = 100
     model = edit.edit_model()
     assert model.data(model.index(0, 0)) == "100"
@@ -217,7 +219,7 @@ def test_pagination(main_window: WindowFixture, tmp_path: Path, qapp: Any) -> No
     edit.goto_page(99)
     qapp.processEvents()
     assert edit.current_page() == 2
-    assert not page._next_btn.isEnabled()
+    assert not editor._next_btn.isEnabled()
     window.close()
 
 
@@ -228,12 +230,11 @@ def test_clear_table_confirm_and_undo(main_window: WindowFixture, tmp_path: Path
     """清空表：确认后表空且可撤销恢复；取消则不动。."""
     from PySide2.QtWidgets import QMessageBox
 
-    import finaldb.gui.widgets.pages.edit_page as edit_mod
+    import finaldb.gui.widgets.pages.edit_panel as panel_mod
 
     window, *_rest = main_window
-    page = _setup(main_window, tmp_path, qapp)[1]
-    page._on_table_activated(0)
-    qapp.processEvents()
+    page = _setup(main_window, tmp_path, qapp)[0]
+    editor = _open_table(page, qapp)
     edit = page._edit
     total_before = edit.total_rows()
 
@@ -241,8 +242,8 @@ def test_clear_table_confirm_and_undo(main_window: WindowFixture, tmp_path: Path
     def answer_no(*_a: object, **_k: object) -> int:
         return QMessageBox.No
 
-    monkeypatch.setattr(edit_mod.QMessageBox, "question", staticmethod(answer_no))
-    page._on_clear_table()
+    monkeypatch.setattr(panel_mod.QMessageBox, "question", staticmethod(answer_no))
+    editor._on_clear_table()
     qapp.processEvents()
     assert edit.total_rows() == total_before
 
@@ -250,8 +251,8 @@ def test_clear_table_confirm_and_undo(main_window: WindowFixture, tmp_path: Path
     def answer_yes(*_a: object, **_k: object) -> int:
         return QMessageBox.Yes
 
-    monkeypatch.setattr(edit_mod.QMessageBox, "question", staticmethod(answer_yes))
-    page._on_clear_table()
+    monkeypatch.setattr(panel_mod.QMessageBox, "question", staticmethod(answer_yes))
+    editor._on_clear_table()
     qapp.processEvents()
     assert edit.total_rows() == 0
 
@@ -267,16 +268,15 @@ def test_copy_selection_tsv(main_window: WindowFixture, tmp_path: Path, qapp: An
     from PySide2.QtWidgets import QApplication
 
     window, *_rest = main_window
-    page = _setup(main_window, tmp_path, qapp, "name,age\n甲,30\n乙,25\n")[1]
-    page._on_table_activated(0)
-    qapp.processEvents()
+    page = _setup(main_window, tmp_path, qapp, "name,age\n甲,30\n乙,25\n")[0]
+    editor = _open_table(page, qapp)
 
     model = page._edit.edit_model()
     # 选中 (0,0) 与 (1,1)（非矩形选区：补齐为 2x2 网格）
-    view = page._view
+    view = editor._view
     view.selectionModel().select(model.index(0, 0), QItemSelectionModel.Select)
     view.selectionModel().select(model.index(1, 1), QItemSelectionModel.Select)
-    page._on_copy()
+    editor._on_copy()
     text = QApplication.clipboard().text()
     assert "甲" in text and "25" in text
     assert text.count("\t") >= 1
