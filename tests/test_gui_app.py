@@ -48,7 +48,7 @@ def test_create_app_assembles_window(qapp: object) -> None:
     assert theme is not None
     assert theme.is_dark() is False
     assert window.current_page() == "home"
-    assert window.stack.count() == 7
+    assert window.stack.count() == 8
 
 
 def test_create_app_theme_change_rebuilds_qss(qapp: object) -> None:

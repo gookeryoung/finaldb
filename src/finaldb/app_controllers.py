@@ -6,6 +6,7 @@ from PySide2.QtCore import QObject
 
 from finaldb.gui.controllers.about_controller import AboutController
 from finaldb.gui.controllers.clean_controller import CleanController
+from finaldb.gui.controllers.editing_controller import EditingController
 from finaldb.gui.controllers.history_controller import HistoryController
 from finaldb.gui.controllers.merge_controller import MergeController
 from finaldb.gui.controllers.preview_controller import PreviewController
@@ -29,6 +30,7 @@ def create_controllers() -> Controllers:
         "preview": PreviewController(),
         "clean": CleanController(),
         "merge": MergeController(),
+        "editing": EditingController(),
         "history": HistoryController(),
         "stats": StatsController(),
         "about": AboutController(),

@@ -9,6 +9,7 @@ from finaldb.app_controllers import Controllers
 from finaldb.gui.theme import ThemeManager
 from finaldb.gui.widgets.pages.about_page import AboutPage
 from finaldb.gui.widgets.pages.clean_page import CleanPage
+from finaldb.gui.widgets.pages.edit_page import EditPage
 from finaldb.gui.widgets.pages.history_page import HistoryPage
 from finaldb.gui.widgets.pages.home_page import HomePage
 from finaldb.gui.widgets.pages.merge_page import MergePage
@@ -18,12 +19,12 @@ from finaldb.gui.widgets.sidebar import Sidebar
 
 __all__ = ["PAGE_ORDER", "MainWindow"]
 
-# 页面顺序（Ctrl+1..7 对应索引）
-PAGE_ORDER = ["home", "clean", "merge", "history", "stats", "settings", "about"]
+# 页面顺序（Ctrl+1..8 对应索引）
+PAGE_ORDER = ["home", "clean", "merge", "edit", "history", "stats", "settings", "about"]
 
 
 class MainWindow(QMainWindow):
-    """七页导航主窗口。."""
+    """八页导航主窗口。."""
 
     def __init__(self, theme: ThemeManager, controllers: Controllers, parent: QWidget | None = None) -> None:
         """初始化主窗口并组装侧边栏与页面栈。
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
             "home": HomePage(theme, controllers["workspace"], controllers["preview"]),
             "clean": CleanPage(theme, controllers["workspace"], controllers["clean"]),
             "merge": MergePage(theme, controllers["workspace"], controllers["merge"]),
+            "edit": EditPage(theme, controllers["workspace"], controllers["editing"]),
             "history": HistoryPage(theme, controllers["workspace"], controllers["history"]),
             "stats": StatsPage(theme, controllers["workspace"], controllers["stats"]),
             "settings": SettingsPage(theme, controllers["workspace"], controllers["about"]),
@@ -98,7 +100,7 @@ class MainWindow(QMainWindow):
                 return
 
     def _build_shortcuts(self) -> None:
-        """注册全局快捷键：Ctrl+1..7 切页，Ctrl+B 折叠侧边栏。."""
+        """注册全局快捷键：Ctrl+1..8 切页，Ctrl+B 折叠侧边栏。."""
         for i, page_id in enumerate(PAGE_ORDER, start=1):
             shortcut = QShortcut(QKeySequence(f"Ctrl+{i}"), self)
             shortcut.activated.connect(lambda pid=page_id: self.set_current_page(pid))

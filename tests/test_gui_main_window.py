@@ -10,14 +10,14 @@ from finaldb.gui.widgets.main_window import PAGE_ORDER
 
 pytestmark = pytest.mark.gui
 
-# main_window fixture 元组：(主窗口, 主题, 工作区/预览/清洗/合并/历史/统计/关于控制器)
+# main_window fixture 元组：(主窗口, 主题, 工作区/预览/清洗/合并/编辑/历史/统计/关于控制器)
 WindowFixture = tuple[Any, ...]
 
 
-def test_window_assembles_seven_pages(main_window: WindowFixture) -> None:
-    """主窗口装配七页且默认停在数据源页。."""
+def test_window_assembles_eight_pages(main_window: WindowFixture) -> None:
+    """主窗口装配八页且默认停在数据源页。."""
     window, *_rest = main_window
-    assert window.stack.count() == len(PAGE_ORDER) == 7
+    assert window.stack.count() == len(PAGE_ORDER) == 8
     assert set(window.pages) == set(PAGE_ORDER)
     assert window.current_page() == "home"
 

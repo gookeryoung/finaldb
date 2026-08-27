@@ -32,11 +32,12 @@ def main_window(qapp: QApplication) -> Iterator[tuple[Any, ...]]:
 
     Yields:
         (主窗口, 主题管理器, 工作区控制器, 预览控制器,
-         清洗控制器, 合并控制器, 历史控制器, 统计控制器, 关于控制器)
+         清洗控制器, 合并控制器, 编辑控制器, 历史控制器, 统计控制器, 关于控制器)
     """
     from finaldb.app import create_main_window
     from finaldb.gui.controllers.about_controller import AboutController
     from finaldb.gui.controllers.clean_controller import CleanController
+    from finaldb.gui.controllers.editing_controller import EditingController
     from finaldb.gui.controllers.history_controller import HistoryController
     from finaldb.gui.controllers.merge_controller import MergeController
     from finaldb.gui.controllers.preview_controller import PreviewController
@@ -50,6 +51,7 @@ def main_window(qapp: QApplication) -> Iterator[tuple[Any, ...]]:
         preview_ctrl = PreviewController()
         clean_ctrl = CleanController()
         merge_ctrl = MergeController()
+        editing_ctrl = EditingController()
         history_ctrl = HistoryController()
         stats_ctrl = StatsController()
         about_ctrl = AboutController()
@@ -58,6 +60,7 @@ def main_window(qapp: QApplication) -> Iterator[tuple[Any, ...]]:
             "preview": preview_ctrl,
             "clean": clean_ctrl,
             "merge": merge_ctrl,
+            "editing": editing_ctrl,
             "history": history_ctrl,
             "stats": stats_ctrl,
             "about": about_ctrl,
@@ -70,6 +73,7 @@ def main_window(qapp: QApplication) -> Iterator[tuple[Any, ...]]:
             preview_ctrl,
             clean_ctrl,
             merge_ctrl,
+            editing_ctrl,
             history_ctrl,
             stats_ctrl,
             about_ctrl,
