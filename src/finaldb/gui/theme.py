@@ -319,6 +319,11 @@ QPushButton[variant="danger"]:hover {{
     border: 1px solid {c["danger"]};
 }}
 QPushButton[variant="danger"]:disabled {{ color: {c["text_secondary"]}; border: 1px solid {c["border"]}; }}
+/* 工具栏纯图标按钮：正方形紧凑点击区 */
+QPushButton[iconButton="true"] {{
+    padding: 4px 5px;
+    min-width: 18px;
+}}
 /* 工具栏分组竖分隔线 */
 QFrame#toolSeparator {{ background-color: {c["border"]}; border: none; }}
 

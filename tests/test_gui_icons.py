@@ -43,6 +43,9 @@ def test_edit_panel_buttons_have_icons(main_window: Any, qapp: Any) -> None:
     ]
     assert len(editor._icon_buttons) == len(buttons)
     for btn in buttons:
+        # 纯图标按钮：无文字、有悬浮提示、图标非空
+        assert btn.text() == ""
+        assert btn.toolTip()
         assert not btn.icon().isNull()
     window.close()
 
