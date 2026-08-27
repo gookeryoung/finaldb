@@ -1,0 +1,9 @@
+[
+  {"name": "张伟", "age": 35, "city": "北京", "salary": 12000},
+  {"name": "李娜", "age": 28, "city": "上海", "salary": 10500},
+  {"name": "王强", "age": 42, "city": "深圳", "salary": 15000},
+  {"name": "赵敏", "age": 31, "city": "成都", "salary": 9800},
+  {"name": "陈静", "age": null, "city": "杭州", "salary": 8800},
+  {"name": "张伟", "age": 35, "city": "北京", "salary": 12000},
+  {"name": "刘洋", "age": 26, "city": "广州", "salary": null}
+]
