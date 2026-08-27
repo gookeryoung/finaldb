@@ -24,6 +24,7 @@ from PySide2.QtWidgets import (
 from finaldb.gui.controllers.editing_controller import EditingController
 from finaldb.gui.theme import SPACING_SM, ThemeManager
 from finaldb.gui.widgets.common import caption_label, card
+from finaldb.gui.widgets.icons import build_icon
 from finaldb.gui.widgets.toast import Toast
 
 __all__ = ["EditPanel"]
@@ -161,6 +162,21 @@ class EditPanel(QWidget):
         self._edit.table_loaded.connect(self._on_table_loaded)  # pyrefly: ignore [missing-attribute]
         self._edit.undo_changed.connect(self._update_actions)  # pyrefly: ignore [missing-attribute]
         self._edit.error_raised.connect(self._toast.show_error)  # pyrefly: ignore [missing-attribute]
+        # 工具栏/分页按钮 → 图标名映射（颜色按按钮分级随主题重建）
+        self._icon_buttons: list[tuple[QPushButton, str]] = [
+            (self._undo_btn, "undo"),
+            (self._redo_btn, "redo"),
+            (self._add_row_btn, "add_row"),
+            (self._del_row_btn, "del_row"),
+            (self._add_col_btn, "add_col"),
+            (self._rename_col_btn, "rename_col"),
+            (self._drop_col_btn, "del_col"),
+            (self._clear_btn, "clear_table"),
+            (self._prev_btn, "prev_page"),
+            (self._next_btn, "next_page"),
+        ]
+        self._apply_icons()
+        self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
         # 模型整页重载（撤销/结构变化）时保持视图选中（行列操作连续进行）
         edit_model = self._edit.edit_model()
         edit_model.modelAboutToBeReset.connect(self._save_selection)
@@ -310,6 +326,24 @@ class EditPanel(QWidget):
     def _on_next_page(self) -> None:
         """下一页。."""
         self._edit.goto_page(self._edit.current_page() + 1)
+
+    # ----------------------------- 图标 -----------------------------
+
+    def _apply_icons(self) -> None:
+        """按当前主题为全部工具按钮重建图标。
+
+        图标颜色与按钮分级一致：主操作取主色底上的前景色、
+        secondary 取正文色、danger 取危险色；主题切换时整体重绘。
+        """
+        for btn, name in self._icon_buttons:
+            variant = str(btn.property("variant") or "")
+            if variant == "danger":
+                color = self._theme.color("danger")
+            elif variant == "secondary":
+                color = self._theme.color("text_primary")
+            else:
+                color = self._theme.color("text_on_primary")
+            btn.setIcon(build_icon(name, color))
 
     # ----------------------------- 状态 -----------------------------
 
