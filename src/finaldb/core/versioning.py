@@ -1,16 +1,13 @@
-"""版本控制：基于 dulwich 的快照级提交/历史/对比/回滚。
+"""版本控制：基于 dulwich 的快照级提交与变更检测。
 
 快照语义：每次提交把工作区的 ``data.db`` 整体存为一个 git blob；
-不做行级 merge，回滚即用历史 blob 覆盖当前数据库。
+不做行级 merge。当前仅保留提交与变更检测（导入自动快照），
+历史列表/对比/回滚等 GUI 入口已随版本页移除。
 """
 
 from __future__ import annotations
 
-import sqlite3
-import tempfile
 from dataclasses import dataclass
-from difflib import unified_diff
-from operator import attrgetter
 from pathlib import Path
 from typing import cast
 
@@ -20,15 +17,11 @@ from dulwich.objects import Blob, Commit, Tree
 from dulwich.repo import Repo
 
 from finaldb.core.exceptions import VersionError
-from finaldb.core.storage.database import table_infos
 
 __all__ = [
     "SnapshotInfo",
     "commit_snapshot",
     "has_changes",
-    "list_snapshots",
-    "restore_snapshot",
-    "snapshot_diff",
 ]
 
 # 仓库内跟踪的文件（仅数据库一个条目）
@@ -80,7 +73,7 @@ def commit_snapshot(ws_path: Path, message: str) -> SnapshotInfo:
 
 
 def has_changes(ws_path: Path) -> bool:
-    """当前数据库与最新快照是否存在差异（无仓库时视为有变化）。."""
+    """当前数据库与最新快照是否存在差异（无仓库时视为有变化）。"""
     db_path = ws_path / "data.db"
     if not db_path.is_file():
         return False
@@ -94,109 +87,27 @@ def has_changes(ws_path: Path) -> bool:
     return _db_blob(repo, parent) != db_path.read_bytes()
 
 
-def list_snapshots(ws_path: Path) -> list[SnapshotInfo]:
-    """按时间倒序列出全部快照（无仓库返回空列表）。."""
-    try:
-        repo = Repo(str(ws_path))
-    except NotGitRepository:
-        return []
-    if _head_sha(repo) is None:
-        return []
-    snapshots = [_info_of(entry.commit) for entry in repo.get_walker()]
-    snapshots.sort(key=attrgetter("timestamp"), reverse=True)
-    return snapshots
-
-
-def snapshot_diff(ws_path: Path, ref_old: str, ref_new: str) -> str:
-    """对比两快照的表级差异（表集合、列与行数）。
-
-    :param ws_path: 工作区目录
-    :param ref_old: 旧快照引用（完整/短 id 或 ``HEAD``）
-    :param ref_new: 新快照引用
-    :return: 统一 diff 文本（相同则提示无差异）
-    :raises VersionError: 引用无法解析
-    """
-    repo = _require_repo(ws_path)
-    old_data = _db_blob(repo, _resolve(repo, ref_old))
-    new_data = _db_blob(repo, _resolve(repo, ref_new))
-    if old_data == new_data:
-        return "两快照数据完全相同"
-    old_lines = _dump_db(old_data)
-    new_lines = _dump_db(new_data)
-    diff = unified_diff(old_lines, new_lines, fromfile=ref_old, tofile=ref_new, lineterm="")
-    return "\n".join(diff)
-
-
-def restore_snapshot(ws_path: Path, ref: str) -> SnapshotInfo:
-    """回滚：用指定快照的 data.db 覆盖当前数据库。
-
-    :param ws_path: 工作区目录
-    :param ref: 快照引用（完整/短 id 或 ``HEAD``）
-    :return: 被恢复的快照摘要
-    :raises VersionError: 引用无法解析
-    """
-    repo = _require_repo(ws_path)
-    sha = _resolve(repo, ref)
-    data = _db_blob(repo, sha)
-    db_path = ws_path / "data.db"
-    db_path.write_bytes(data)
-    # 清理可能残留的 WAL/共享内存文件，避免旧缓存干扰回滚后的读取
-    for suffix in ("-wal", "-shm"):
-        side = ws_path / f"data.db{suffix}"
-        if side.exists():
-            side.unlink()
-    return _info_of(cast(Commit, repo[sha]))
-
-
 # ----------------------------- 内部 -----------------------------
 
 
 def _open_or_init(ws_path: Path) -> Repo:
-    """打开工作区内嵌 git 仓库，不存在则初始化。."""
+    """打开工作区内嵌 git 仓库，不存在则初始化。"""
     try:
         return Repo(str(ws_path))
     except NotGitRepository:
         return porcelain.init(str(ws_path))
 
 
-def _require_repo(ws_path: Path) -> Repo:
-    """打开仓库，未初始化抛 VersionError。."""
-    try:
-        return Repo(str(ws_path))
-    except NotGitRepository as exc:
-        raise VersionError("工作区尚未创建任何快照") from exc
-
-
 def _head_sha(repo: Repo) -> bytes | None:
-    """当前分支头提交 id（空仓库返回 None）。."""
+    """当前分支头提交 id（空仓库返回 None）。"""
     try:
         return repo.head()
     except (KeyError, IndexError):
         return None
 
 
-def _resolve(repo: Repo, ref: str) -> bytes:
-    """解析快照引用为完整提交 id。
-
-    支持 ``HEAD``、完整 hex 与短 id 前缀匹配。
-    """
-    text = ref.strip()
-    if not text:
-        raise VersionError("空的快照引用")
-    if text == "HEAD":
-        sha = _head_sha(repo)
-        if sha is None:
-            raise VersionError("仓库尚无提交")
-        return sha
-    prefix = text.lower().encode("ascii")
-    for entry in repo.get_walker():
-        if entry.commit.id.lower().startswith(prefix):
-            return entry.commit.id
-    raise VersionError(f"快照不存在: {ref}")
-
-
 def _db_blob(repo: Repo, sha: bytes) -> bytes:
-    """读取指定提交里 data.db 的 blob 内容（缺失报错）。."""
+    """读取指定提交里 data.db 的 blob 内容（缺失报错）。"""
     commit = cast(Commit, repo[sha])
     tree = cast(Tree, repo[commit.tree])
     try:
@@ -207,7 +118,7 @@ def _db_blob(repo: Repo, sha: bytes) -> bytes:
 
 
 def _info_of(commit: Commit) -> SnapshotInfo:
-    """把 dulwich Commit 转为快照摘要。."""
+    """把 dulwich Commit 转为快照摘要。"""
     commit_id = commit.id.decode("ascii")
     message = commit.message.decode("utf-8", "replace").strip()
     return SnapshotInfo(
@@ -216,18 +127,3 @@ def _info_of(commit: Commit) -> SnapshotInfo:
         message=message.splitlines()[0] if message else "（无说明）",
         timestamp=commit.commit_time,
     )
-
-
-def _dump_db(data: bytes) -> list[str]:
-    """把数据库字节物化为临时文件并导出表级统计行（供 diff）。."""
-    with tempfile.TemporaryDirectory() as tmp:
-        db_file = Path(tmp) / "data.db"
-        db_file.write_bytes(data)
-        conn: sqlite3.Connection = sqlite3.connect(db_file)
-        try:
-            return [
-                f"表 {info.name}: {info.row_count} 行 | 列: {', '.join(c.name for c in info.columns)}"
-                for info in table_infos(conn)
-            ]
-        finally:
-            conn.close()

@@ -1,4 +1,4 @@
-"""版本控制测试：快照提交、历史列表、对比与回滚。."""
+"""版本控制测试：快照提交与变更检测（导入自动快照底层能力）。."""
 
 from __future__ import annotations
 
@@ -9,13 +9,7 @@ from pathlib import Path
 import pytest
 
 from finaldb.core.exceptions import VersionError
-from finaldb.core.versioning import (
-    commit_snapshot,
-    has_changes,
-    list_snapshots,
-    restore_snapshot,
-    snapshot_diff,
-)
+from finaldb.core.versioning import commit_snapshot, has_changes
 
 
 @pytest.fixture()
@@ -39,25 +33,17 @@ def _write_rows(ws_dir: Path, rows: list[tuple[object, ...]]) -> None:
     conn.close()
 
 
-def _read_rows(ws_dir: Path) -> list[tuple[object, ...]]:
-    """读取当前 t 表全部行。."""
-    conn = sqlite3.connect(ws_dir / "data.db")
-    try:
-        return conn.execute('SELECT "name", "age" FROM "t"').fetchall()
-    finally:
-        conn.close()
-
-
-def test_commit_and_list(ws: Path) -> None:
-    """提交快照后历史列表按时间倒序返回。."""
-    first = commit_snapshot(ws, "首次导入")
+def test_commit_returns_info(ws: Path) -> None:
+    """提交快照返回摘要（完整 id / 短 id / 说明 / 时间戳）。."""
+    info = commit_snapshot(ws, "首次导入")
+    assert info.message == "首次导入"
+    assert len(info.commit_id) == 40
+    assert info.short_id == info.commit_id[:7]
+    assert info.timestamp > 0
+    # 第二次提交时间不早于第一次
     _write_rows(ws, [("甲", 30), ("乙", 25)])
     second = commit_snapshot(ws, "补充数据")
-    snapshots = list_snapshots(ws)
-    assert [s.short_id for s in snapshots] == [second.short_id, first.short_id]
-    assert snapshots[0].message == "补充数据"
-    assert snapshots[0].timestamp >= snapshots[1].timestamp
-    assert len(snapshots[0].commit_id) == 40
+    assert second.timestamp >= info.timestamp
 
 
 def test_commit_empty_message_uses_default(ws: Path) -> None:
@@ -90,84 +76,8 @@ def test_has_changes(ws: Path) -> None:
     assert has_changes(ws) is True
 
 
-def test_list_snapshots_no_repo(tmp_path: Path) -> None:
-    """未初始化仓库返回空列表。."""
+def test_has_changes_without_db(tmp_path: Path) -> None:
+    """无数据库文件时视为无变化（无可提交内容）。."""
     empty = tmp_path / "empty"
     empty.mkdir()
-    assert list_snapshots(empty) == []
-
-
-def test_snapshot_diff(ws: Path) -> None:
-    """对比两快照表级行数差异。."""
-    first = commit_snapshot(ws, "一")
-    _write_rows(ws, [("甲", 30), ("乙", 25)])
-    second = commit_snapshot(ws, "二")
-    text = snapshot_diff(ws, first.short_id, second.short_id)
-    assert "t: 1 行" in text
-    assert "t: 2 行" in text
-    assert "-表 t: 1 行" in text
-    assert "+表 t: 2 行" in text
-
-
-def test_snapshot_diff_identical(ws: Path) -> None:
-    """相同数据（不同提交）对比提示无差异。."""
-    first = commit_snapshot(ws, "一")
-    # 改动后改回（内容相同字节可能不同，但表级 dump 一致时仍给出 diff）；
-    # 直接用同一引用对比自身
-    assert snapshot_diff(ws, first.short_id, first.short_id) == "两快照数据完全相同"
-
-
-def test_snapshot_diff_head_ref(ws: Path) -> None:
-    """HEAD 引用解析到最新快照。."""
-    first = commit_snapshot(ws, "一")
-    _write_rows(ws, [("甲", 30), ("乙", 25), ("丙", 40)])
-    commit_snapshot(ws, "二")
-    text = snapshot_diff(ws, first.short_id, "HEAD")
-    assert text.startswith(f"--- {first.short_id}")
-    assert "+表 t: 3 行" in text
-
-
-def test_snapshot_diff_bad_ref(ws: Path) -> None:
-    """无法解析的引用报错。."""
-    commit_snapshot(ws, "一")
-    with pytest.raises(VersionError, match="快照不存在"):
-        snapshot_diff(ws, "deadbee", "HEAD")
-    with pytest.raises(VersionError, match="空的快照引用"):
-        snapshot_diff(ws, "", "HEAD")
-
-
-def test_snapshot_diff_no_repo(tmp_path: Path) -> None:
-    """未初始化仓库做对比报错。."""
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    with pytest.raises(VersionError, match="尚未创建"):
-        snapshot_diff(empty, "HEAD", "HEAD")
-
-
-def test_restore(ws: Path) -> None:
-    """回滚到旧快照后数据恢复。."""
-    first = commit_snapshot(ws, "一")
-    _write_rows(ws, [("甲", 30), ("乙", 25)])
-    commit_snapshot(ws, "二")
-    info = restore_snapshot(ws, first.short_id)
-    assert info.short_id == first.short_id
-    assert _read_rows(ws) == [("甲", 30)]
-
-
-def test_restore_full_id_and_head(ws: Path) -> None:
-    """完整 id 与 HEAD 引用均可回滚。."""
-    _write_rows(ws, [("甲", 30), ("乙", 25)])
-    second = commit_snapshot(ws, "二")
-    # 回滚到 HEAD（即自身）数据不变
-    restore_snapshot(ws, "HEAD")
-    assert _read_rows(ws) == [("甲", 30), ("乙", 25)]
-    # 完整 id 等价
-    restore_snapshot(ws, second.commit_id)
-    assert _read_rows(ws) == [("甲", 30), ("乙", 25)]
-
-
-def test_restore_bad_ref(ws: Path) -> None:
-    """回滚不存在的引用报错。"""
-    commit_snapshot(ws, "一")
-    with pytest.raises(VersionError, match="快照不存在"):
-        restore_snapshot(ws, "nope")
+    assert has_changes(empty) is False
