@@ -37,13 +37,14 @@ jobs:
         run: uv run pyrefly check
 
   test:
-    name: Test (Python 3.13 & 3.13)
+    name: Test (Python 3.10)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.13", "3.13"]
+        # 项目约束 >=3.8,<3.11；PySide2 与测试链仅在 3.10 基线验证通过
+        python-version: ["3.10"]
     steps:
       - uses: actions/checkout@v5
 
@@ -52,6 +53,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+
+      - name: Install Qt runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1 libxkbcommon-x11-0 libdbus-1-3 libfontconfig1
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
