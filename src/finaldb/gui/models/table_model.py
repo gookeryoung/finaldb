@@ -35,6 +35,7 @@ class TableListModel(QAbstractListModel):
         """按角色返回表名/行数。."""
         if not index.isValid() or not (0 <= index.row() < len(self._entries)):
             return None
+
         name, rows = self._entries[index.row()]
         key = role - Qt.UserRole
         if key == 1:

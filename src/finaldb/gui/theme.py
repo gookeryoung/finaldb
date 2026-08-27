@@ -390,9 +390,11 @@ QTableView {{
     font-size: {small}px;
     selection-background-color: {c["selection_strong"]};
     selection-color: {c["text_primary"]};
+    /* 交替行底色走视图级属性（整行矩形绘制）：逐 item 设 :alternate 背景会
+       使奇数行进入 QSS 盒模型渲染、与偶数行默认绘制产生 1-2px 垂直错位 */
+    alternate-background-color: {c["row_alt"]};
 }}
 QTableView::item {{ padding: 2px 6px; }}
-QTableView::item:alternate {{ background-color: {c["row_alt"]}; }}
 QTableView::item:selected {{ background-color: {c["selection_strong"]}; color: {c["text_primary"]}; }}
 /* 编辑页表格：嵌于卡片内，去自身边框避免双线 */
 QTableView#editView {{ border: none; border-radius: 0; }}
