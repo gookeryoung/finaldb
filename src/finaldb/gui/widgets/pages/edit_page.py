@@ -7,6 +7,7 @@ from PySide2.QtGui import QKeySequence, QShowEvent
 from PySide2.QtWidgets import (
     QApplication,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QInputDialog,
     QMessageBox,
@@ -24,6 +25,32 @@ from finaldb.gui.widgets.common import caption_label, card, page_title, workspac
 from finaldb.gui.widgets.toast import Toast
 
 __all__ = ["EditPage"]
+
+
+def _tool_button(text: str, tip: str, variant: str = "secondary") -> QPushButton:
+    """工具栏按钮工厂：统一尺寸提示并按操作分级着色。
+
+    Args:
+        text: 按钮文本
+        tip: 悬浮提示
+        variant: 操作分级（secondary 描边 / danger 危险 / 留空为主操作实心）
+
+    Returns:
+        配置好的按钮
+    """
+    btn = QPushButton(text)
+    btn.setToolTip(tip)
+    if variant:
+        btn.setProperty("variant", variant)
+    return btn
+
+
+def _tool_separator() -> QFrame:
+    """工具栏分组竖分隔线。."""
+    line = QFrame()
+    line.setObjectName("toolSeparator")
+    line.setFixedSize(1, 22)
+    return line
 
 
 class EditPage(QWidget):
@@ -61,7 +88,7 @@ class EditPage(QWidget):
         bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据源页选择）"), stretch=1)
         root.addLayout(bar)
 
-        # ---------- 工具行：表选择 + 撤销重做 + 行列操作 ----------
+        # ---------- 工具行：表选择 | 撤销重做 | 行操作 | 列操作 | 危险操作 ----------
         tools = QHBoxLayout()
         tools.setSpacing(SPACING_SM)
         tools.addWidget(caption_label("数据表"))
@@ -70,39 +97,40 @@ class EditPage(QWidget):
         self._table_combo.activated.connect(self._on_table_activated)
         tools.addWidget(self._table_combo)
 
-        self._undo_btn = QPushButton("撤销")
-        self._undo_btn.setToolTip("撤销上一步编辑")
+        tools.addWidget(_tool_separator())
+
+        self._undo_btn = _tool_button("撤销", "撤销上一步编辑")
         self._undo_btn.clicked.connect(self._edit.undo)
-        self._redo_btn = QPushButton("重做")
-        self._redo_btn.setToolTip("重做被撤销的编辑")
+        self._redo_btn = _tool_button("重做", "重做被撤销的编辑")
         self._redo_btn.clicked.connect(self._edit.redo)
         tools.addWidget(self._undo_btn)
         tools.addWidget(self._redo_btn)
 
-        self._add_row_btn = QPushButton("加行")
-        self._add_row_btn.setToolTip("在表末尾追加一行")
+        tools.addWidget(_tool_separator())
+
+        self._add_row_btn = _tool_button("加行", "在表末尾追加一行", variant="")
         self._add_row_btn.clicked.connect(self._on_add_row)
-        self._del_row_btn = QPushButton("删行")
-        self._del_row_btn.setToolTip("删除选中的行")
+        self._del_row_btn = _tool_button("删行", "删除选中的行", variant="danger")
         self._del_row_btn.clicked.connect(self._on_delete_rows)
         tools.addWidget(self._add_row_btn)
         tools.addWidget(self._del_row_btn)
 
-        self._add_col_btn = QPushButton("加列")
-        self._add_col_btn.setToolTip("追加新列")
+        tools.addWidget(_tool_separator())
+
+        self._add_col_btn = _tool_button("加列", "追加新列")
         self._add_col_btn.clicked.connect(self._on_add_column)
-        self._rename_col_btn = QPushButton("重命名列")
-        self._rename_col_btn.setToolTip("重命名所选列")
+        self._rename_col_btn = _tool_button("重命名列", "重命名所选列")
         self._rename_col_btn.clicked.connect(self._on_rename_column)
-        self._drop_col_btn = QPushButton("删列")
-        self._drop_col_btn.setToolTip("删除所选列")
+        self._drop_col_btn = _tool_button("删列", "删除所选列", variant="danger")
         self._drop_col_btn.clicked.connect(self._on_drop_column)
-        self._clear_btn = QPushButton("清空表")
-        self._clear_btn.setToolTip("删除当前表全部行（可撤销）")
-        self._clear_btn.clicked.connect(self._on_clear_table)
         tools.addWidget(self._add_col_btn)
         tools.addWidget(self._rename_col_btn)
         tools.addWidget(self._drop_col_btn)
+
+        tools.addWidget(_tool_separator())
+
+        self._clear_btn = _tool_button("清空表", "删除当前表全部行（可撤销）", variant="danger")
+        self._clear_btn.clicked.connect(self._on_clear_table)
         tools.addWidget(self._clear_btn)
         tools.addStretch(1)
         root.addLayout(tools)
@@ -116,28 +144,32 @@ class EditPage(QWidget):
         self._view.setObjectName("editView")
         self._view.setModel(self._edit.edit_model())
         self._view.setAlternatingRowColors(True)
-        self._view.verticalHeader().setVisible(False)
+        # 行号列：编辑定位行更直观（按页内偏移显示，跟随分页刷新）
+        self._view.verticalHeader().setVisible(True)
         self._view.horizontalHeader().setStretchLastSection(True)
         body_layout.addWidget(self._view)
         self._empty = caption_label("选择数据表后开始编辑")
+        self._empty.setObjectName("editEmpty")
         self._empty.setAlignment(Qt.AlignCenter)
-        self._empty.setMinimumHeight(160)
+        self._empty.setMinimumHeight(200)
         self._empty.setVisible(True)
         self._view.setVisible(False)
         body_layout.addWidget(self._empty)
         root.addWidget(body, stretch=1)
 
-        # ---------- 分页条 ----------
+        # ---------- 分页条（居中） ----------
         pager = QHBoxLayout()
         pager.setSpacing(SPACING_SM)
-        self._prev_btn = QPushButton("上一页")
+        self._prev_btn = _tool_button("上一页", "上一页")
         self._prev_btn.clicked.connect(self._on_prev_page)
-        self._next_btn = QPushButton("下一页")
+        self._next_btn = _tool_button("下一页", "下一页")
         self._next_btn.clicked.connect(self._on_next_page)
         self._page_label = caption_label("")
+        pager.addStretch(1)
         pager.addWidget(self._prev_btn)
+        pager.addWidget(self._page_label)
         pager.addWidget(self._next_btn)
-        pager.addWidget(self._page_label, stretch=1)
+        pager.addStretch(1)
         root.addLayout(pager)
 
         # ---------- 信号装配 ----------

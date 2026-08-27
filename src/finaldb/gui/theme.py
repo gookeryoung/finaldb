@@ -296,6 +296,31 @@ QPushButton[linkButton="true"] {{
     min-height: 0;
 }}
 QPushButton[linkButton="true"]:hover {{ color: {c["danger"]}; }}
+/* 工具栏按钮分级：secondary 描边幽灵按钮 / danger 危险操作按钮 */
+QPushButton[variant="secondary"] {{
+    background: transparent;
+    color: {c["text_primary"]};
+    border: 1px solid {c["border"]};
+}}
+QPushButton[variant="secondary"]:hover {{
+    background-color: {c["bg_hover"]};
+    border: 1px solid {c["primary"]};
+    color: {c["primary"]};
+}}
+QPushButton[variant="secondary"]:disabled {{ color: {c["text_secondary"]}; border: 1px solid {c["border"]}; }}
+QPushButton[variant="danger"] {{
+    background: transparent;
+    color: {c["danger"]};
+    border: 1px solid {c["border"]};
+}}
+QPushButton[variant="danger"]:hover {{
+    background-color: {c["danger"]};
+    color: {c["text_on_primary"]};
+    border: 1px solid {c["danger"]};
+}}
+QPushButton[variant="danger"]:disabled {{ color: {c["text_secondary"]}; border: 1px solid {c["border"]}; }}
+/* 工具栏分组竖分隔线 */
+QFrame#toolSeparator {{ background-color: {c["border"]}; border: none; }}
 
 /* ========== 输入控件 ========== */
 QLineEdit, QComboBox, QSpinBox {{
@@ -358,9 +383,15 @@ QTableView {{
     border-radius: {RADIUS_SM}px;
     gridline-color: {c["border"]};
     font-size: {small}px;
+    selection-background-color: {c["selection_strong"]};
+    selection-color: {c["text_primary"]};
 }}
 QTableView::item {{ padding: 2px 6px; }}
 QTableView::item:alternate {{ background-color: {c["row_alt"]}; }}
+QTableView::item:selected {{ background-color: {c["selection_strong"]}; color: {c["text_primary"]}; }}
+/* 编辑页表格：嵌于卡片内，去自身边框避免双线 */
+QTableView#editView {{ border: none; border-radius: 0; }}
+QTableView#editView::item {{ padding: 4px 6px; }}
 QHeaderView::section {{
     background-color: {c["bg_hover"]};
     color: {c["text_secondary"]};
@@ -370,7 +401,10 @@ QHeaderView::section {{
     padding: 4px 8px;
     font-size: {caption}px;
 }}
+QHeaderView::section:hover {{ background-color: {c["bg_selected"]}; }}
 QTableCornerButton::section {{ background-color: {c["bg_hover"]}; border: none; }}
+/* 编辑页空态提示 */
+QLabel#editEmpty {{ color: {c["text_secondary"]}; font-size: {theme.font_size_heading()}px; }}
 
 /* ========== 文本域 ========== */
 QTextEdit, QPlainTextEdit {{
