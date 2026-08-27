@@ -75,3 +75,9 @@ def main() -> int:  # pragma: no cover
     app, window, _theme = create_app(sys.argv)
     window.show()
     return app.exec_()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    # 模块直跑入口：fspack wrapper 经 run_module 以 __main__ 执行本模块，
+    # 无此守卫时模块体执行完即静默退出（无窗口、退出码 0）。
+    sys.exit(main())
