@@ -230,8 +230,12 @@ def table_exists(conn: sqlite3.Connection, table: str) -> bool:
 
 
 def table_infos(conn: sqlite3.Connection) -> list[TableInfo]:
-    """列出库内全部用户表的元数据（按名称排序）。."""
-    cur = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+    """列出库内全部用户表的元数据（按名称排序，隐藏内部元表）。."""
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_finaldb\\_%' ESCAPE '\\' "
+        "ORDER BY name"
+    )
     infos = []
     for (name,) in cur.fetchall():
         infos.append(TableInfo(name, column_infos(conn, name), row_count_of(conn, name)))
@@ -251,8 +255,12 @@ def row_count_of(conn: sqlite3.Connection, table: str) -> int:
 
 
 def table_names(conn: sqlite3.Connection) -> list[str]:
-    """列出库内全部用户表名（按名称排序）。."""
-    cur = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+    """列出库内全部用户表名（按名称排序，隐藏内部元表）。."""
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_finaldb\\_%' ESCAPE '\\' "
+        "ORDER BY name"
+    )
     return [row[0] for row in cur.fetchall()]
 
 

@@ -45,6 +45,18 @@ from finaldb.core.storage.editing import (
 from finaldb.core.storage.editing import (
     update_cell as _update_cell,
 )
+from finaldb.core.storage.keys import (
+    clear_key_rule as _clear_key_rule,
+)
+from finaldb.core.storage.keys import (
+    get_key_rule as _get_key_rule,
+)
+from finaldb.core.storage.keys import (
+    next_key as _next_key,
+)
+from finaldb.core.storage.keys import (
+    set_key_rule as _set_key_rule,
+)
 
 __all__ = ["EditCommand", "EditService"]
 
@@ -145,10 +157,17 @@ class EditService:
         )
 
     def add_row(self, table: str, values: Sequence[object] | None = None) -> int:
-        """追加一行（缺省全 NULL），返回新行 rowid。"""
+        """追加一行（缺省全 NULL；已定义键规则时自动生成键序号），返回新行 rowid。"""
         with self._session() as conn:
             names = [c.name for c in column_infos(conn, table)]
-            row = list(values) if values is not None else [None] * len(names)
+            row: list[object] = list(values) if values is not None else [None] * len(names)
+            if values is None:
+                # 键规则：在键列自动填入下一序号
+                rule = _get_key_rule(conn, table)
+                if rule is not None and rule[0] in names:
+                    key = _next_key(conn, table, rule[0])
+                    if key is not None:
+                        row[names.index(rule[0])] = key
             rowid = _insert_row(conn, table, row)
         self._push(
             EditCommand(
@@ -239,6 +258,34 @@ class EditService:
                 undo_args=(table, tuple((int(r[0]), tuple(r[1:])) for r in snapshots)),
             )
         )
+
+    # ----------------------------- 键规则 -----------------------------
+
+    def key_rule(self, table: str) -> tuple[str, int] | None:
+        """读取表的键规则。
+
+        :param table: 表名
+        :return: (键列名, 下一序号)；未定义返回 None
+        """
+        with self._session() as conn:
+            return _get_key_rule(conn, table)
+
+    def set_key_rule(self, table: str, column: str, start: int) -> None:
+        """定义表的键规则（起始序号与现有数据取较大者）。
+
+        :param table: 表名
+        :param column: 键列名（须存在）
+        :param start: 起始序号
+        :raises ValueError: 列不存在
+        """
+        with self._session() as conn:
+            self._column_type(conn, table, column)
+            _set_key_rule(conn, table, column, start)
+
+    def clear_key_rule(self, table: str) -> None:
+        """清除表的键规则。."""
+        with self._session() as conn:
+            _clear_key_rule(conn, table)
 
     # ----------------------------- 撤销 / 重做 -----------------------------
 

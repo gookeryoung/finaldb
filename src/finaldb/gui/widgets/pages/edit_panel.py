@@ -10,6 +10,7 @@ from PySide2.QtCore import QSize, Qt
 from PySide2.QtGui import QKeySequence
 from PySide2.QtWidgets import (
     QApplication,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -17,6 +18,7 @@ from PySide2.QtWidgets import (
     QMessageBox,
     QPushButton,
     QShortcut,
+    QSpinBox,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -120,8 +122,41 @@ class EditPanel(QWidget):
         self._clear_btn = _tool_button("清空表（删除全部行，可撤销）", variant="danger")
         self._clear_btn.clicked.connect(self._on_clear_table)
         tools.addWidget(self._clear_btn)
+
+        # 键规则：定义自增键列（切换内联规则条）
+        self._key_rule_btn = QPushButton("键规则")
+        self._key_rule_btn.setProperty("variant", "secondary")
+        self._key_rule_btn.setToolTip("定义自增键列：追加行时自动生成键序号")
+        self._key_rule_btn.clicked.connect(self._toggle_rule_bar)
+        tools.addWidget(self._key_rule_btn)
         tools.addStretch(1)
         root.addLayout(tools)
+
+        # ---------- 键规则内联条（默认隐藏） ----------
+        self._rule_bar = QWidget()
+        rule_layout = QHBoxLayout(self._rule_bar)
+        rule_layout.setContentsMargins(0, 0, 0, 0)
+        rule_layout.setSpacing(SPACING_SM)
+        rule_layout.addWidget(caption_label("自增键列"))
+        self._rule_combo = QComboBox()
+        self._rule_combo.setMinimumWidth(140)
+        rule_layout.addWidget(self._rule_combo)
+        rule_layout.addWidget(caption_label("起始序号"))
+        self._rule_start = QSpinBox()
+        self._rule_start.setRange(1, 999999999)
+        apply_rule_btn = QPushButton("应用")
+        apply_rule_btn.clicked.connect(self._on_apply_rule)
+        clear_rule_btn = QPushButton("清除")
+        clear_rule_btn.setProperty("variant", "secondary")
+        clear_rule_btn.clicked.connect(self._edit.clear_key_rule)
+        rule_layout.addWidget(self._rule_start)
+        rule_layout.addWidget(apply_rule_btn)
+        rule_layout.addWidget(clear_rule_btn)
+        rule_layout.addStretch(1)
+        self._rule_hint = caption_label("")
+        rule_layout.addWidget(self._rule_hint)
+        self._rule_bar.setVisible(False)
+        root.addWidget(self._rule_bar)
 
         # ---------- 编辑表格 ----------
         body = card()
@@ -168,6 +203,7 @@ class EditPanel(QWidget):
         self._edit.table_loaded.connect(self._on_table_loaded)  # pyrefly: ignore [missing-attribute]
         self._edit.undo_changed.connect(self._update_actions)  # pyrefly: ignore [missing-attribute]
         self._edit.error_raised.connect(self._toast.show_error)  # pyrefly: ignore [missing-attribute]
+        self._edit.key_rule_changed.connect(self._on_key_rule_changed)  # pyrefly: ignore [missing-attribute]
         # 工具栏按钮 → 图标名映射（颜色按按钮分级随主题重建；
         # 分页按钮无对应资产，保持纯文字）
         self._icon_buttons: list[tuple[QPushButton, str]] = [
@@ -206,6 +242,45 @@ class EditPanel(QWidget):
         self._edit.load_tables(workspace_path)
 
     # ----------------------------- 行操作 -----------------------------
+
+    def _toggle_rule_bar(self) -> None:
+        """切换键规则内联条可见性（无表时提示）。."""
+        if not self._edit.has_table():
+            self._toast.show_message("请先选择数据表")
+            return
+        # 用 isHidden 判定显式可见意图（父级未 show 时 isVisible 恒 False）
+        self._rule_bar.setVisible(self._rule_bar.isHidden())
+        if not self._rule_bar.isHidden():
+            self._reload_rule_bar()
+
+    def _reload_rule_bar(self) -> None:
+        """按当前表列与键规则刷新规则条（列下拉 + 起始序号 + 状态提示）。."""
+        columns = self._edit.edit_model().column_names()
+        rule = self._edit.key_rule()
+        self._rule_combo.blockSignals(True)
+        self._rule_combo.clear()
+        self._rule_combo.addItems(columns)
+        if rule is not None and rule[0] in columns:
+            self._rule_combo.setCurrentText(rule[0])
+            self._rule_hint.setText(f"当前键列 {rule[0]}，下一序号 {rule[1]}")
+        else:
+            self._rule_hint.setText("未定义键规则" if columns else "表无列")
+        self._rule_combo.blockSignals(False)
+
+    def _on_apply_rule(self) -> None:
+        """应用键规则（键列 + 起始序号）。."""
+        column = self._rule_combo.currentText()
+        if not column:
+            self._toast.show_message("请选择键列")
+            return
+        self._edit.set_key_rule(column, self._rule_start.value())
+
+    def _on_key_rule_changed(self) -> None:
+        """键规则变化：同步列头标识与规则条状态。."""
+        rule = self._edit.key_rule()
+        self._edit.edit_model().set_key_column(rule[0] if rule is not None else "")
+        if not self._rule_bar.isHidden():
+            self._reload_rule_bar()
 
     def _on_add_row(self) -> None:
         """追加空行。."""
@@ -275,11 +350,11 @@ class EditPanel(QWidget):
         model = self._edit.edit_model()
         if not index.isValid():
             return ""
-        columns_count = model.columnCount()
         col = index.column()
-        if not (0 <= col < columns_count):
+        names = model.column_names()
+        if not (0 <= col < len(names)):
             return ""
-        return str(model.headerData(col, Qt.Horizontal) or "")
+        return names[col]
 
     def _save_selection(self) -> None:
         """模型重置前记录当前选中单元格。."""
@@ -353,10 +428,14 @@ class EditPanel(QWidget):
     # ----------------------------- 状态 -----------------------------
 
     def _on_table_loaded(self) -> None:
-        """表数据重载：刷新分页信息与空态。."""
+        """表数据重载：刷新分页信息、空态与规则条。."""
         has_table = self._edit.has_table()
         self._view.setVisible(has_table)
         self._empty.setVisible(not has_table)
+        if not has_table:
+            self._rule_bar.setVisible(False)
+        elif not self._rule_bar.isHidden():
+            self._reload_rule_bar()
         if has_table:
             from finaldb.core.editing.service import PAGE_SIZE
 
@@ -378,6 +457,7 @@ class EditPanel(QWidget):
         self._rename_col_btn.setEnabled(has_table)
         self._drop_col_btn.setEnabled(has_table)
         self._clear_btn.setEnabled(has_table)
+        self._key_rule_btn.setEnabled(has_table)
         self._prev_btn.setEnabled(has_table and self._edit.current_page() > 0)
         from finaldb.core.editing.service import PAGE_SIZE
 

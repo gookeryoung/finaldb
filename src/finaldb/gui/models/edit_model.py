@@ -25,6 +25,7 @@ class EditableTableModel(QAbstractTableModel):
         self._columns: list[str] = []
         self._rows: list[tuple[int, tuple[object, ...]]] = []
         self._set_cell_callback: Any = None
+        self._key_column = ""
 
     def set_cell_callback(self, callback: Any) -> None:
         """注册单元格落库回调 callback(rowid, column, text) -> bool。
@@ -33,6 +34,12 @@ class EditableTableModel(QAbstractTableModel):
             callback: 返回 True 表示落库成功（模型更新缓存）
         """
         self._set_cell_callback = callback
+
+    def set_key_column(self, column: str) -> None:
+        """设置键列（列头追加「·键」标识；空串清除）。."""
+        self._key_column = column
+        if self._columns:
+            self.headerDataChanged.emit(Qt.Horizontal, 0, len(self._columns) - 1)
 
     # ----------------------------- Qt 模型协议 -----------------------------
 
@@ -82,9 +89,17 @@ class EditableTableModel(QAbstractTableModel):
         return ok
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> Any:
-        """列头返回列名。."""
+        """列头返回列名（键列追加「·键」标识）。."""
         if role == Qt.DisplayRole and orientation == Qt.Horizontal and 0 <= section < len(self._columns):
-            return self._columns[section]
+            name = self._columns[section]
+            return f"{name} ·键" if name == self._key_column else name
+        if (
+            role == Qt.ToolTipRole
+            and orientation == Qt.Horizontal
+            and 0 <= section < len(self._columns)
+            and self._columns[section] == self._key_column
+        ):
+            return f"{self._key_column} 为自增键列：追加行时自动填入下一序号"
         return None
 
     # ----------------------------- 数据装载 -----------------------------
@@ -95,6 +110,10 @@ class EditableTableModel(QAbstractTableModel):
         self._columns = list(columns)
         self._rows = list(rows)
         self.endResetModel()
+
+    def column_names(self) -> list[str]:
+        """当前列名列表（模型数据源，不含键标识）。."""
+        return list(self._columns)
 
     def rowid_at(self, row: int) -> int | None:
         """按视图行号取 rowid（越界返回 None）。."""

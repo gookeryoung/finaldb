@@ -1,11 +1,12 @@
 """编辑控制器：桥接 core 编辑服务与 Widgets 编辑页。
 
 职责：编辑会话管理（打开表/分页）、命令分发（单元格/行/列）、
-撤销重做状态推送。界面只连接本控制器的信号与调用其方法。
+键规则管理、撤销重做状态推送、保存状态推送（状态栏）。
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from PySide2.QtCore import QObject, Signal
@@ -23,6 +24,8 @@ class EditingController(QObject):
     table_loaded = Signal()
     data_changed = Signal()
     undo_changed = Signal()
+    key_rule_changed = Signal()
+    saved = Signal(str)
     error_raised = Signal(str)
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -116,6 +119,7 @@ class EditingController(QObject):
         self._reload_page()
         self.table_loaded.emit()  # pyrefly: ignore [missing-attribute]
         self.undo_changed.emit()  # pyrefly: ignore [missing-attribute]
+        self.key_rule_changed.emit()  # pyrefly: ignore [missing-attribute]
 
     def goto_page(self, page: int) -> None:
         """跳转页码（钳制到有效范围）。."""
@@ -142,6 +146,7 @@ class EditingController(QObject):
         self._reload_page()
         self.data_changed.emit()  # pyrefly: ignore [missing-attribute]
         self.undo_changed.emit()  # pyrefly: ignore [missing-attribute]
+        self._emit_saved()
 
     def add_row(self) -> None:
         """当前表追加空行。."""
@@ -209,6 +214,32 @@ class EditingController(QObject):
             return
         self._after_structure_change()
 
+    # ----------------------------- 键规则 -----------------------------
+
+    def key_rule(self) -> tuple[str, int] | None:
+        """当前表的键规则 (键列名, 下一序号)；未打开表或未定义返回 None。."""
+        if self._service is None or not self._table:
+            return None
+        return self._service.key_rule(self._table)
+
+    def set_key_rule(self, column: str, start: int) -> None:
+        """定义当前表的键规则（键列 + 起始序号）。."""
+        if self._service is None or not self._table:
+            return
+        try:
+            self._service.set_key_rule(self._table, column, start)
+        except ValueError as exc:
+            self.error_raised.emit(str(exc))  # pyrefly: ignore [missing-attribute]
+            return
+        self.key_rule_changed.emit()  # pyrefly: ignore [missing-attribute]
+
+    def clear_key_rule(self) -> None:
+        """清除当前表的键规则。."""
+        if self._service is None or not self._table:
+            return
+        self._service.clear_key_rule(self._table)
+        self.key_rule_changed.emit()  # pyrefly: ignore [missing-attribute]
+
     # ----------------------------- 撤销 / 重做 -----------------------------
 
     def undo(self) -> None:
@@ -223,6 +254,7 @@ class EditingController(QObject):
         self._reload_page()
         self.table_loaded.emit()  # pyrefly: ignore [missing-attribute]
         self.undo_changed.emit()  # pyrefly: ignore [missing-attribute]
+        self._emit_saved()
 
     def redo(self) -> None:
         """重做栈顶命令。."""
@@ -236,6 +268,7 @@ class EditingController(QObject):
         self._reload_page()
         self.table_loaded.emit()  # pyrefly: ignore [missing-attribute]
         self.undo_changed.emit()  # pyrefly: ignore [missing-attribute]
+        self._emit_saved()
 
     # ----------------------------- 内部 -----------------------------
 
@@ -249,6 +282,7 @@ class EditingController(QObject):
             self.error_raised.emit(str(exc))  # pyrefly: ignore [missing-attribute]
             return False
         self.undo_changed.emit()  # pyrefly: ignore [missing-attribute]
+        self._emit_saved()
         return True
 
     def _reload_page(self) -> None:
@@ -260,12 +294,17 @@ class EditingController(QObject):
         self._model.reset_data(columns, rows)
 
     def _after_row_change(self) -> None:
-        """行数变化：刷新行数与表列表，重载当前页。."""
+        """行数变化：刷新行数与表列表，重载当前页。"""
         self._reload_page()
         self.table_loaded.emit()  # pyrefly: ignore [missing-attribute]
         self.undo_changed.emit()  # pyrefly: ignore [missing-attribute]
+        self._emit_saved()
         if self._workspace_path:
             self.load_tables(self._workspace_path)
+
+    def _emit_saved(self) -> None:
+        """推送保存状态（编辑即时落库，带时间戳供状态栏显示）。."""
+        self.saved.emit(f"已保存 {datetime.now().strftime('%H:%M:%S')}")  # pyrefly: ignore [missing-attribute]
 
     def _after_structure_change(self) -> None:
         """列结构变化：刷新表列表并重载当前页。."""
@@ -280,3 +319,4 @@ class EditingController(QObject):
         self._model.reset_data([], [])
         self.table_loaded.emit()  # pyrefly: ignore [missing-attribute]
         self.undo_changed.emit()  # pyrefly: ignore [missing-attribute]
+        self.key_rule_changed.emit()  # pyrefly: ignore [missing-attribute]

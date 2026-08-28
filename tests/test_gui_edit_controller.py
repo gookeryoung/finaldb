@@ -184,3 +184,34 @@ def test_table_list_reload_after_row_change(ctrl: tuple[EditingController, Path]
 
     rows_value = model.data(model.index(0, 0), Qt.UserRole + 2)
     assert rows_value == 4
+
+
+def test_key_rule_and_autofill(ctrl: tuple[EditingController, Path]) -> None:
+    """键规则定义后追加行自动填键序号，清除后回退全空行。."""
+    controller, _ws = ctrl
+    controller.open_table("t")
+    assert controller.key_rule() is None
+    controller.set_key_rule("age", 100)
+    rule = controller.key_rule()
+    assert rule is not None and rule[0] == "age" and rule[1] == 100  # max(100, 40+1)
+    controller.add_row()
+    model = controller.edit_model()
+    assert model.data(model.index(3, 1)) == "100"
+    controller.clear_key_rule()
+    assert controller.key_rule() is None
+    controller.add_row()
+    assert model.data(model.index(4, 1)) == ""
+
+
+def test_saved_signal_emitted(ctrl: tuple[EditingController, Path]) -> None:
+    """编辑命令与撤销重做后推送保存状态（状态栏数据源）。"""
+    controller, _ws = ctrl
+    controller.open_table("t")
+    saved: list[str] = []
+    controller.saved.connect(saved.append)  # pyrefly: ignore [missing-attribute]
+    controller.add_row()
+    controller.set_cell("t", 1, "age", "31")
+    controller.undo()
+    controller.redo()
+    assert len(saved) == 4
+    assert all(text.startswith("已保存 ") for text in saved)

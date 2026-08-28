@@ -413,6 +413,14 @@ QTableCornerButton::section {{ background-color: {c["bg_hover"]}; border: none; 
 /* 编辑页空态提示 */
 QLabel#editEmpty {{ color: {c["text_secondary"]}; font-size: {theme.font_size_heading()}px; }}
 
+/* ========== 状态栏 ========== */
+QStatusBar {{
+    background-color: {c["bg_app"]};
+    border-top: 1px solid {c["border"]};
+}}
+QStatusBar::item {{ border: none; }}
+QLabel#statusSaved {{ color: {c["text_secondary"]}; font-size: {caption}px; padding: 0 4px; }}
+
 /* ========== 文本域 ========== */
 QTextEdit, QPlainTextEdit {{
     background-color: {c["bg_card"]};

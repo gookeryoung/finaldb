@@ -1,11 +1,19 @@
-"""主窗口：侧边栏 + 页面栈（QStackedWidget），全局快捷键。."""
+"""主窗口：侧边栏 + 页面栈（QStackedWidget）+ 状态栏，全局快捷键。."""
 
 from __future__ import annotations
 
 from PySide2.QtGui import QKeySequence
-from PySide2.QtWidgets import QHBoxLayout, QMainWindow, QShortcut, QStackedWidget, QWidget
+from PySide2.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QShortcut,
+    QStackedWidget,
+    QWidget,
+)
 
 from finaldb.app_controllers import Controllers
+from finaldb.gui.controllers.editing_controller import EditingController
 from finaldb.gui.theme import ThemeManager
 from finaldb.gui.widgets.pages.about_page import AboutPage
 from finaldb.gui.widgets.pages.data_page import DataPage
@@ -63,6 +71,14 @@ class MainWindow(QMainWindow):
         root.addWidget(self.stack, stretch=1)
 
         self.setCentralWidget(central)
+
+        # ---------- 状态栏：保存状态（编辑即时落库，每次操作后更新） ----------
+        self._saved_label = QLabel("就绪")
+        self._saved_label.setObjectName("statusSaved")
+        self.statusBar().addWidget(self._saved_label)
+        editing = controllers["editing"]
+        if isinstance(editing, EditingController):
+            editing.saved.connect(self._saved_label.setText)  # pyrefly: ignore [missing-attribute]
 
         self.sidebar.page_requested.connect(self.set_current_page)  # pyrefly: ignore [missing-attribute]
         self.stack.currentChanged.connect(self._on_stack_changed)
