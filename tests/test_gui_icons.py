@@ -6,13 +6,14 @@ from typing import Any
 
 import pytest
 
+import finaldb.gui.widgets.icons as icons_mod
 from finaldb.gui.widgets.icons import ICON_NAMES, build_icon
 
 pytestmark = pytest.mark.gui
 
 
 def test_all_icons_non_null(qapp: Any) -> None:
-    """全部注册图标均可绘制出非空 pixmap。."""
+    """全部注册图标均可绘制出非空 pixmap（SVG 资产与自绘两条路径）。."""
     for name in ICON_NAMES:
         icon = build_icon(name, "#0366D6")
         assert not icon.isNull()
@@ -23,6 +24,35 @@ def test_unknown_icon_raises(qapp: Any) -> None:
     """未注册图标名：抛 ValueError 且提示含原名。."""
     with pytest.raises(ValueError, match="未知图标名称: nope"):
         build_icon("nope", "#000000")
+
+
+def test_asset_icon_renders(qapp: Any) -> None:
+    """SVG 资产图标（undo）按主题色渲染出非空 pixmap。."""
+    assert "undo" in icons_mod._ASSET_FILES
+    icon = build_icon("undo", "#0366D6")
+    assert not icon.isNull()
+
+
+def test_asset_missing_falls_back_to_draw(qapp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """SVG 资产缺失/渲染失败时回退 QPainter 自绘，不抛异常。."""
+
+    def _no_asset(_filename: str) -> str:
+        return ""
+
+    # 资产文本为空：视为文件缺失 → 走自绘回退
+    monkeypatch.setattr(icons_mod, "_asset_svg", _no_asset)
+    icon = build_icon("undo", "#0366D6")
+    assert not icon.isNull()
+
+
+def test_icon_color_changes_pixmap(qapp: Any) -> None:
+    """不同主题色渲染的资产图标像素数据不同（着色生效）。"""
+    img_a = build_icon("clear_table", "#0366D6").pixmap(24, 24).toImage()
+    img_b = build_icon("clear_table", "#E74C3C").pixmap(24, 24).toImage()
+    # 逐像素比较（QImage 的 ==/!= 是 Python 标识比较，不可用）
+    pixels_a = [img_a.pixel(x, y) for x in range(24) for y in range(24)]
+    pixels_b = [img_b.pixel(x, y) for x in range(24) for y in range(24)]
+    assert pixels_a != pixels_b
 
 
 def test_edit_panel_buttons_have_icons(main_window: Any, qapp: Any) -> None:

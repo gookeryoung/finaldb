@@ -189,6 +189,17 @@ def _draw_add(p: QPainter) -> None:
     _plus(p, 12, 12, arm=4.0)
 
 
+def _draw_import_data(p: QPainter) -> None:
+    """导入：托盘 + 上箭头。."""
+    p.drawPolyline(QPolygonF([QPointF(12, 4), QPointF(12, 13), QPointF(8, 9.5), QPointF(12, 13), QPointF(16, 9.5)]))
+    p.drawPolyline(QPolygonF([QPointF(4, 15), QPointF(4, 20), QPointF(20, 20), QPointF(20, 15)]))
+
+
+def _draw_rename(p: QPainter) -> None:
+    """重命名：铅笔（与 rename_col 同形）。"""
+    _draw_rename_col(p)
+
+
 # 图标名 → 绘制函数注册表（自绘）
 _PAINTERS: dict[str, Callable[[QPainter], None]] = {
     "undo": _draw_undo,
@@ -206,6 +217,8 @@ _PAINTERS: dict[str, Callable[[QPainter], None]] = {
     "apply": _draw_apply,
     "delete": _draw_delete,
     "add": _draw_add,
+    "import_data": _draw_import_data,
+    "rename": _draw_rename,
 }
 
 # 全部可用图标名（对外只读清单）
@@ -225,10 +238,11 @@ def _asset_svg(filename: str) -> str:
     if not svg_file.is_file():
         return ""
     text = svg_file.read_text("utf-8")
-    # 逐段替换 fill="..." 属性值（含单双引号形式）；无 fill 的 path
-    # 默认黑色，统一补 fill 占位符由主题色接管
+    # 单色化：已有 fill 的替换其值；无 fill 的 path 补上
+    # （SVG 默认黑色，补占位符后由主题色接管）
     text = re.sub(r'fill="[^"]*"', f'fill="{_FILL_TOKEN}"', text)
     text = re.sub(r"fill='[^']*'", f"fill='{_FILL_TOKEN}'", text)
+    text = text.replace("<path ", f'<path fill="{_FILL_TOKEN}" ')
     return text
 
 
