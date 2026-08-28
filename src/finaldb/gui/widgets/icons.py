@@ -46,6 +46,7 @@ _ASSET_FILES = {
     "about": "about.svg",
     "moon": "moon.svg",
     "sun": "sun.svg",
+    "question": "question.svg",
 }
 
 # SVG 单色化：把全部 fill 属性值替换为占位符（渲染前换主题色）
@@ -246,6 +247,14 @@ def _draw_moon(p: QPainter) -> None:
     p.drawArc(QRectF(2, 4, 15, 16), -60 * 16, 140 * 16)
 
 
+def _draw_question(p: QPainter) -> None:
+    """问号圆：信息圆变体（? 形）。."""
+    p.drawEllipse(QRectF(4, 4, 16, 16))
+    p.drawArc(QRectF(8.5, 7, 7, 7), 0, -180 * 16)
+    p.drawLine(QPointF(12, 14), QPointF(12, 16.5))
+    p.drawPoint(QPointF(12, 19))
+
+
 def _draw_sun(p: QPainter) -> None:
     """太阳：中心圆 + 八向光芒。."""
     p.drawEllipse(QRectF(8, 8, 8, 8))
@@ -281,6 +290,7 @@ _PAINTERS: dict[str, Callable[[QPainter], None]] = {
     "about": _draw_about,
     "moon": _draw_moon,
     "sun": _draw_sun,
+    "question": _draw_question,
 }
 
 # 全部可用图标名（对外只读清单）

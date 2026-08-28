@@ -108,7 +108,7 @@ class DataPage(QWidget):
         self._ws_combo.setObjectName("workspaceCombo")
         self._ws_combo.activated.connect(self._on_workspace_activated)
         ws_row.addWidget(self._ws_combo, stretch=1)
-        self._ws_delete_btn = QPushButton("✕")
+        self._ws_delete_btn = QPushButton()
         self._ws_delete_btn.setProperty("linkButton", True)
         self._ws_delete_btn.setCursor(Qt.PointingHandCursor)
         self._ws_delete_btn.setToolTip("删除当前工作区")
@@ -180,7 +180,7 @@ class DataPage(QWidget):
         self._icon_buttons: list[tuple[QPushButton, str, str]] = [
             (self._new_btn, "add", "primary"),
             (self._import_btn, "import_data", "primary"),
-            (self._ws_delete_btn, "delete", "danger"),
+            (self._ws_delete_btn, "question", "danger"),
         ]
         self._apply_icons()
         self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
