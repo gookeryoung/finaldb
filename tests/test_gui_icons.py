@@ -34,7 +34,7 @@ def test_asset_icon_renders(qapp: Any) -> None:
 
 
 def test_asset_missing_falls_back_to_draw(qapp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    """SVG 资产缺失/渲染失败时回退 QPainter 自绘，不抛异常。."""
+    """SVG 资产缺失/渲染失败时回退 QPainter 自绘，不抛异常。"""
 
     def _no_asset(_filename: str) -> str:
         return ""
@@ -43,6 +43,37 @@ def test_asset_missing_falls_back_to_draw(qapp: Any, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(icons_mod, "_asset_svg", _no_asset)
     icon = build_icon("undo", "#0366D6")
     assert not icon.isNull()
+
+
+def test_all_fallback_painters_draw(qapp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """全部有资产映射的图标在资产缺失时自绘回退均可出图。."""
+
+    def _no_asset(_filename: str) -> str:
+        return ""
+
+    monkeypatch.setattr(icons_mod, "_asset_svg", _no_asset)
+    for name in (
+        "undo",
+        "redo",
+        "add_row",
+        "del_row",
+        "add_col",
+        "del_col",
+        "rename_col",
+        "clear_table",
+        "import_data",
+        "rename",
+        "refresh",
+        "database",
+        "stats",
+        "settings",
+        "about",
+        "moon",
+        "sun",
+    ):
+        icon = build_icon(name, "#0366D6")
+        assert not icon.isNull(), f"自绘回退失败: {name}"
+        assert not icon.pixmap(24, 24).isNull()
 
 
 def test_icon_color_changes_pixmap(qapp: Any) -> None:

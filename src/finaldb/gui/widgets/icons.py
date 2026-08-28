@@ -8,6 +8,7 @@ SVG 资产图标按 ``assets/icons/*.svg`` 加载：读取 path 数据做单色�
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from functools import lru_cache
@@ -38,6 +39,13 @@ _ASSET_FILES = {
     "clear_table": "clear.svg",
     "import_data": "diff.svg",
     "rename": "rename.svg",
+    "refresh": "refresh.svg",
+    "database": "database.svg",
+    "stats": "stats.svg",
+    "settings": "settings.svg",
+    "about": "about.svg",
+    "moon": "moon.svg",
+    "sun": "sun.svg",
 }
 
 # SVG 单色化：把全部 fill 属性值替换为占位符（渲染前换主题色）
@@ -200,6 +208,54 @@ def _draw_rename(p: QPainter) -> None:
     _draw_rename_col(p)
 
 
+def _draw_database(p: QPainter) -> None:
+    """数据库：圆柱体（顶面椭圆 + 两侧弧身）。."""
+    p.drawEllipse(QRectF(4, 4, 16, 6))
+    p.drawArc(QRectF(4, 14, 16, 6), 180 * 16, 180 * 16)
+    p.drawLine(QPointF(4, 7), QPointF(4, 17))
+    p.drawLine(QPointF(20, 7), QPointF(20, 17))
+
+
+def _draw_stats(p: QPainter) -> None:
+    """统计：三柱条形图。."""
+    p.drawLine(QPointF(4, 20), QPointF(20, 20))
+    p.drawRect(QRectF(6, 12, 3, 8))
+    p.drawRect(QRectF(11, 8, 3, 12))
+    p.drawRect(QRectF(16, 4, 3, 16))
+
+
+def _draw_settings(p: QPainter) -> None:
+    """设置：齿轮（外圆 + 齿辐 + 中心孔）。."""
+    p.drawEllipse(QRectF(7, 7, 10, 10))
+    for _angle in range(0, 360, 45):
+        rad = math.radians(_angle)
+        cx, cy = 12 + 8 * math.cos(rad), 12 + 8 * math.sin(rad)
+        p.drawEllipse(QPointF(cx, cy), 1.6, 1.6)
+
+
+def _draw_about(p: QPainter) -> None:
+    """关于：信息圆（i）。."""
+    p.drawEllipse(QRectF(4, 4, 16, 16))
+    p.drawPoint(QPointF(12, 8.5))
+    p.drawLine(QPointF(12, 11.5), QPointF(12, 16.5))
+
+
+def _draw_moon(p: QPainter) -> None:
+    """月亮：月牙（大圆弧 + 偏移小圆弧）。."""
+    p.drawArc(QRectF(5, 4, 15, 16), 30 * 16, 280 * 16)
+    p.drawArc(QRectF(2, 4, 15, 16), -60 * 16, 140 * 16)
+
+
+def _draw_sun(p: QPainter) -> None:
+    """太阳：中心圆 + 八向光芒。."""
+    p.drawEllipse(QRectF(8, 8, 8, 8))
+    for _angle in range(0, 360, 45):
+        rad = math.radians(_angle)
+        x1, y1 = 12 + 5.5 * math.cos(rad), 12 + 5.5 * math.sin(rad)
+        x2, y2 = 12 + 8 * math.cos(rad), 12 + 8 * math.sin(rad)
+        p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+
+
 # 图标名 → 绘制函数注册表（自绘）
 _PAINTERS: dict[str, Callable[[QPainter], None]] = {
     "undo": _draw_undo,
@@ -219,6 +275,12 @@ _PAINTERS: dict[str, Callable[[QPainter], None]] = {
     "add": _draw_add,
     "import_data": _draw_import_data,
     "rename": _draw_rename,
+    "database": _draw_database,
+    "stats": _draw_stats,
+    "settings": _draw_settings,
+    "about": _draw_about,
+    "moon": _draw_moon,
+    "sun": _draw_sun,
 }
 
 # 全部可用图标名（对外只读清单）
