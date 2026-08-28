@@ -182,6 +182,7 @@ class DataPage(QWidget):
 
         # ---------- 图标装配（随主题重建） ----------
         self._icon_buttons: list[tuple[QPushButton, str, str]] = [
+            (self._new_btn, "new", "primary"),
             (self._import_btn, "import_data", "primary"),
             (self._ws_delete_btn, "question", "danger"),
         ]

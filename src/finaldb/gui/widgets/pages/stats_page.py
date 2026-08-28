@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide2.QtCore import Qt
-from PySide2.QtGui import QShowEvent
+from PySide2.QtGui import QFontMetrics, QShowEvent
 from PySide2.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -11,6 +11,7 @@ from PySide2.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QStackedWidget,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -24,9 +25,11 @@ from finaldb.gui.widgets.icons import build_icon
 
 __all__ = ["StatsPage"]
 
-# 条形高度与最小宽度（像素）
-_BAR_HEIGHT = 14
-_BAR_MIN_WIDTH = 4
+# 条形行各列宽度（逻辑像素）：名称标签 / 行数标签
+_NAME_WIDTH = 120
+_ROWS_WIDTH = 56
+# 名称省略占位
+_ELLIPSIS = "..."
 
 
 class StatsPage(QWidget):
@@ -72,6 +75,7 @@ class StatsPage(QWidget):
         # ---------- 摘要 ----------
         self._summary = QLabel("")
         self._summary.setObjectName("statsSummary")
+        self._summary.setWordWrap(True)
         root.addWidget(self._summary)
 
         # ---------- 主体两栏 ----------
@@ -80,7 +84,7 @@ class StatsPage(QWidget):
 
         # 左：表行数分布条形图
         left = card()
-        left.setFixedWidth(300)
+        left.setFixedWidth(340)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(SPACING_SM, SPACING_SM, SPACING_SM, SPACING_SM)
         left_layout.setSpacing(SPACING_SM)
@@ -121,12 +125,17 @@ class StatsPage(QWidget):
         header.setSectionResizeMode(QHeaderView.ResizeToContents)
         header.setMinimumSectionSize(72)
         header.setStretchLastSection(True)
-        right_layout.addWidget(self._stat_view, stretch=1)
 
         self._stat_empty = caption_label("选择数据表后查看列统计")
         self._stat_empty.setAlignment(Qt.AlignCenter)
         self._stat_empty.setWordWrap(True)
-        right_layout.addWidget(self._stat_empty)
+
+        # 表格与空态互斥占位（同一栈位切换，避免同时占位挤压）
+        self._stat_stack = QStackedWidget()
+        self._stat_stack.addWidget(self._stat_view)
+        self._stat_stack.addWidget(self._stat_empty)
+        right_layout.addWidget(self._stat_stack, stretch=1)
+
         body.addWidget(right, stretch=1)
 
         root.addLayout(body, stretch=1)
@@ -207,41 +216,54 @@ class StatsPage(QWidget):
         self._table_combo.blockSignals(False)
 
     def _update_stat_state(self) -> None:
-        """按模型行数切换统计表与空态。."""
+        """按模型行数切换统计表与空态（栈互斥占位）。."""
         has_stats = self._stats.table_stats_model().rowCount() > 0
-        self._stat_view.setVisible(has_stats)
-        self._stat_empty.setVisible(not has_stats)
+        self._stat_stack.setCurrentWidget(self._stat_view if has_stats else self._stat_empty)
         if not has_stats:
             self._stat_empty.setText(
                 "选择数据表后查看列统计" if self._table_combo.count() > 0 else "当前工作区暂无数据表"
             )
 
     def _build_bar_row(self, name: str, ratio: float, rows: object) -> QHBoxLayout:
-        """构建单行条形图：名称 | 比例条 | 行数。."""
+        """构建单行条形图：名称（省略）| 比例条 | 行数（右对齐）。."""
         row = QHBoxLayout()
         row.setSpacing(SPACING_SM)
-        name_label = QLabel(name)
-        name_label.setFixedWidth(140)
+        # 名称超宽时中部省略，避免挤压条形与行数
+        name_label = QLabel(self._elide_middle(name, _NAME_WIDTH))
+        name_label.setFixedWidth(_NAME_WIDTH)
+        name_label.setToolTip(name)
         bar_holder = QWidget()
         holder_layout = QHBoxLayout(bar_holder)
         holder_layout.setContentsMargins(0, 0, 0, 0)
         holder_layout.setSpacing(0)
         bar = QWidget()
-        bar.setFixedHeight(_BAR_HEIGHT)
-        bar.setMinimumWidth(_BAR_MIN_WIDTH)
+        bar.setFixedHeight(14)
         spacer = QWidget()
         holder_layout.addWidget(bar)
         holder_layout.addWidget(spacer)
-        # 以 stretch 比例实现条宽随行数占比与窗口宽度自适应
+        # stretch 比例控制条宽占比（fill : 1000-fill），随容器宽度自适应
         filled = max(1, int(ratio * 1000))
         holder_layout.setStretch(0, filled)
         holder_layout.setStretch(1, max(0, 1000 - filled))
         self._bars.append(bar)
         rows_label = caption_label(f"{rows} 行")
+        rows_label.setFixedWidth(_ROWS_WIDTH)
+        rows_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         row.addWidget(name_label)
         row.addWidget(bar_holder, stretch=1)
         row.addWidget(rows_label)
         return row
+
+    @staticmethod
+    def _elide_middle(text: str, width: int) -> str:
+        """按像素宽中部省略文本（保留首尾，中间以 ... 替代）。."""
+        metrics = QFontMetrics(QLabel().font())
+        if metrics.horizontalAdvance(text) <= width:
+            return text
+        keep = max(1, (len(text) - 1) // 2)
+        while keep > 1 and metrics.horizontalAdvance(text[:keep] + _ELLIPSIS + text[-keep:]) > width:
+            keep -= 1
+        return text[:keep] + _ELLIPSIS + text[-keep:]
 
     def _restyle_bars(self) -> None:
         """按当前主题刷新条形颜色。."""

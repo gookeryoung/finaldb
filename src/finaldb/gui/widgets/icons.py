@@ -47,6 +47,7 @@ _ASSET_FILES = {
     "wash_data": "wash_data.svg",
     "merge_data": "merge_data.svg",
     "cancel": "cancel.svg",
+    "new": "new.svg",
 }
 
 # SVG 单色化：把全部 fill 属性值替换为占位符（渲染前换主题色）
