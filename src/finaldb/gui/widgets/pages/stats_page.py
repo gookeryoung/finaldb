@@ -20,6 +20,7 @@ from finaldb.gui.controllers.stats_controller import StatsController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
 from finaldb.gui.widgets.common import caption_label, card, page_title, workspace_hint
+from finaldb.gui.widgets.icons import build_icon
 
 __all__ = ["StatsPage"]
 
@@ -64,6 +65,7 @@ class StatsPage(QWidget):
         bar.addWidget(workspace_hint(theme, workspace_ctrl, "未选择工作区（请先在数据页选择）"), stretch=1)
         refresh_btn = QPushButton("刷新")
         refresh_btn.clicked.connect(self._reload_all)
+        self._refresh_btn = refresh_btn
         bar.addWidget(refresh_btn)
         root.addLayout(bar)
 
@@ -134,9 +136,15 @@ class StatsPage(QWidget):
         self._stats.table_stats_changed.connect(self._update_stat_state)  # pyrefly: ignore [missing-attribute]
         self._ws.current_changed.connect(self._on_workspace_changed)  # pyrefly: ignore [missing-attribute]
         self._theme.theme_changed.connect(self._restyle_bars)  # pyrefly: ignore [missing-attribute]
+        self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
+        self._apply_icons()
 
         self._stats.load_stats(self._ws.current_workspace_path())
         self._refresh()
+
+    def _apply_icons(self) -> None:
+        """按当前主题为刷新按钮重建图标（secondary 描边取正文色）。."""
+        self._refresh_btn.setIcon(build_icon("refresh", self._theme.color("text_primary")))
 
     # ----------------------------- 内部 -----------------------------
 

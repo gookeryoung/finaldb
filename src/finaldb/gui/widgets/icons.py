@@ -1,22 +1,47 @@
-"""矢量图标工厂：QPainter 绘制工具栏单色图标，随主题色重建。
+"""矢量图标工厂：QPainter 自绘 + assets/icons SVG 资产加载，随主题色重建。
 
-不依赖外部图标资源（.qrc/图标字体），所有图形在 24x24 网格内
-以 2px 圆头笔画绘制；调用方按主题色取色后经 :func:`build_icon`
-生成 QIcon，主题切换时以新色值整体重建。
+自绘图标（分页/预览/刷新等通用操作）在 24x24 网格内以 2px 圆头笔画绘制；
+SVG 资产图标按 ``assets/icons/*.svg`` 加载：读取 path 数据做单色化替换
+（fill 统一为主题色）后经 QSvgRenderer 渲染，支持高 DPI。
+两者统一经 :func:`build_icon` 出口，主题切换时以新色值整体重建。
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
+from functools import lru_cache
+from pathlib import Path
 
-from PySide2.QtCore import QPointF, QRectF, Qt
+from PySide2.QtCore import QByteArray, QPointF, QRectF, QSize, Qt
 from PySide2.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
+from PySide2.QtSvg import QSvgRenderer
 
 __all__ = ["ICON_NAMES", "build_icon"]
 
 # 绘制网格边长（逻辑像素）与笔画宽度
 _GRID = 24
 _PEN_WIDTH = 2.0
+
+# SVG 资产目录
+_ICONS_DIR = Path(__file__).resolve().parents[2] / "assets" / "icons"
+
+# 资产图标名 → SVG 文件名映射（与自绘图标的用途对应）
+_ASSET_FILES = {
+    "undo": "undo.svg",
+    "redo": "redo.svg",
+    "add_row": "grid_add_row_after.svg",
+    "del_row": "delete_row.svg",
+    "add_col": "edit_table_add_column_left.svg",
+    "del_col": "delete_column.svg",
+    "rename_col": "edit.svg",
+    "clear_table": "clear.svg",
+    "import_data": "diff.svg",
+    "rename": "rename.svg",
+}
+
+# SVG 单色化：把全部 fill 属性值替换为占位符（渲染前换主题色）
+_FILL_TOKEN = "__FINALDB_ICON_COLOR__"
 
 
 def _pen(color: str) -> QPen:
@@ -134,7 +159,37 @@ def _draw_next_page(p: QPainter) -> None:
     p.drawPolyline(QPolygonF([QPointF(10, 5), QPointF(17, 12), QPointF(10, 19)]))
 
 
-# 图标名 → 绘制函数注册表
+def _draw_refresh(p: QPainter) -> None:
+    """刷新：环形箭头。."""
+    p.drawArc(QRectF(5, 5, 14, 14), 30 * 16, 300 * 16)
+    p.drawPolygon(QPolygonF([QPointF(17, 4), QPointF(21, 8), QPointF(16, 9)]))
+
+
+def _draw_preview(p: QPainter) -> None:
+    """预览：放大镜。."""
+    p.drawEllipse(QRectF(4, 4, 11, 11))
+    p.drawLine(QPointF(13.5, 13.5), QPointF(20, 20))
+
+
+def _draw_apply(p: QPainter) -> None:
+    """应用/执行：勾选圆。."""
+    p.drawEllipse(QRectF(4, 4, 16, 16))
+    p.drawPolyline(QPolygonF([QPointF(8.5, 12.5), QPointF(11, 15), QPointF(16, 9.5)]))
+
+
+def _draw_delete(p: QPainter) -> None:
+    """删除：叉号圆。."""
+    p.drawEllipse(QRectF(4, 4, 16, 16))
+    _cross(p, 12, 12, arm=4.0)
+
+
+def _draw_add(p: QPainter) -> None:
+    """新增：加号圆。."""
+    p.drawEllipse(QRectF(4, 4, 16, 16))
+    _plus(p, 12, 12, arm=4.0)
+
+
+# 图标名 → 绘制函数注册表（自绘）
 _PAINTERS: dict[str, Callable[[QPainter], None]] = {
     "undo": _draw_undo,
     "redo": _draw_redo,
@@ -146,14 +201,61 @@ _PAINTERS: dict[str, Callable[[QPainter], None]] = {
     "clear_table": _draw_clear_table,
     "prev_page": _draw_prev_page,
     "next_page": _draw_next_page,
+    "refresh": _draw_refresh,
+    "preview": _draw_preview,
+    "apply": _draw_apply,
+    "delete": _draw_delete,
+    "add": _draw_add,
 }
 
 # 全部可用图标名（对外只读清单）
 ICON_NAMES = tuple(_PAINTERS)
 
 
+@lru_cache(maxsize=64)
+def _asset_svg(filename: str) -> str:
+    """读取 SVG 文件并单色化（fill 属性统一替换为占位符）。
+
+    结果缓存：文件不变时只读一次；占位符在渲染时替换为主题色。
+
+    :param filename: SVG 文件名（位于 assets/icons）
+    :return: 单色化 SVG 文本（空串表示文件缺失）
+    """
+    svg_file = _ICONS_DIR / filename
+    if not svg_file.is_file():
+        return ""
+    text = svg_file.read_text("utf-8")
+    # 逐段替换 fill="..." 属性值（含单双引号形式）；无 fill 的 path
+    # 默认黑色，统一补 fill 占位符由主题色接管
+    text = re.sub(r'fill="[^"]*"', f'fill="{_FILL_TOKEN}"', text)
+    text = re.sub(r"fill='[^']*'", f"fill='{_FILL_TOKEN}'", text)
+    return text
+
+
+def _build_asset_icon(svg_text: str, color: str) -> QIcon:
+    """把单色化 SVG 按主题色渲染为图标。
+
+    :param svg_text: 含 fill 占位符的 SVG 文本
+    :param color: 十六进制色值
+    :return: 渲染后的 QIcon（渲染失败返回空 QIcon）
+    """
+    data = QByteArray(svg_text.replace(_FILL_TOKEN, color).encode("utf-8"))
+    renderer = QSvgRenderer(data)
+    if not renderer.isValid():
+        return QIcon()
+    # 2x 物理像素渲染，保证高 DPI 下边缘锐利
+    pixmap = QPixmap(_GRID * 2, _GRID * 2)
+    pixmap.setDevicePixelRatio(2.0)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    renderer.render(painter, QRectF(0, 0, _GRID, _GRID))
+    painter.end()
+    return QIcon(pixmap)
+
+
 def build_icon(name: str, color: str) -> QIcon:
-    """按名称与颜色绘制单色矢量图标。
+    """按名称与颜色生成单色图标（优先 SVG 资产，回退自绘）。
 
     Args:
         name: 图标名（须在 ``ICON_NAMES`` 内）
@@ -165,16 +267,28 @@ def build_icon(name: str, color: str) -> QIcon:
     Raises:
         ValueError: 图标名不存在时
     """
-    painter_fn = _PAINTERS.get(name)
-    if painter_fn is None:
+    if name not in _PAINTERS:
         raise ValueError(f"未知图标名称: {name}")
-    # 2x 物理像素绘制，保证高 DPI 下笔画锐利
+    # 有对应 SVG 资产且渲染成功：走资产渲染（视觉更丰富）
+    asset = _ASSET_FILES.get(name)
+    if asset is not None:
+        svg_text = _asset_svg(asset)
+        if svg_text:
+            icon = _build_asset_icon(svg_text, color)
+            if not icon.isNull():
+                return icon
+    # 回退：QPainter 自绘
     pixmap = QPixmap(_GRID * 2, _GRID * 2)
     pixmap.setDevicePixelRatio(2.0)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
     painter.setPen(_pen(color))
-    painter_fn(painter)
+    _PAINTERS[name](painter)
     painter.end()
     return QIcon(pixmap)
+
+
+def icon_size() -> QSize:
+    """标准图标逻辑尺寸（24x24）。."""
+    return QSize(_GRID, _GRID)

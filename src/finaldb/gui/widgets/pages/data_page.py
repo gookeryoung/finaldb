@@ -30,6 +30,7 @@ from finaldb.gui.controllers.merge_controller import MergeController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
 from finaldb.gui.widgets.common import busy_bar, caption_label, card, page_title, workspace_hint
+from finaldb.gui.widgets.icons import build_icon
 from finaldb.gui.widgets.pages.clean_pane import CleanPane
 from finaldb.gui.widgets.pages.edit_panel import EditPanel
 from finaldb.gui.widgets.pages.merge_pane import MergePane
@@ -174,6 +175,28 @@ class DataPage(QWidget):
 
         self._refresh_workspaces()
         self._on_workspace_changed()
+
+        # ---------- 图标装配（随主题重建） ----------
+        self._icon_buttons: list[tuple[QPushButton, str, str]] = [
+            (self._new_btn, "add", "primary"),
+            (self._import_btn, "import_data", "primary"),
+            (self._ws_delete_btn, "delete", "danger"),
+        ]
+        self._apply_icons()
+        self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
+
+    def _apply_icons(self) -> None:
+        """按当前主题为工具栏按钮重建图标。
+
+        颜色与按钮分级一致：primary 取主色底上的前景色、
+        danger 取危险色；主题切换时整体重绘。
+        """
+        for btn, name, level in self._icon_buttons:
+            if level == "danger":
+                color = self._theme.color("danger")
+            else:
+                color = self._theme.color("text_on_primary")
+            btn.setIcon(build_icon(name, color))
 
     # ----------------------------- 工作区 -----------------------------
 

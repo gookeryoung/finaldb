@@ -26,6 +26,7 @@ from finaldb.gui.controllers.clean_controller import CleanController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
 from finaldb.gui.widgets.common import busy_bar, caption_label, card
+from finaldb.gui.widgets.icons import build_icon
 from finaldb.gui.widgets.toast import Toast
 
 __all__ = ["CleanPane"]
@@ -236,6 +237,23 @@ class CleanPane(QWidget):
 
         self._on_kind_changed(self._kind_combo.currentIndex())
         self._on_workspace_changed()
+
+        # ---------- 图标装配（随主题重建） ----------
+        self._icon_buttons: list[tuple[QPushButton, str]] = [
+            (self._preview_btn, "preview"),
+            (self._apply_btn, "apply"),
+            (add_btn, "add"),
+            (clear_btn, "delete"),
+        ]
+        self._apply_icons()
+        self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
+
+    def _apply_icons(self) -> None:
+        """按当前主题为工具按钮重建图标（预览/应用主色，其余正文色）。."""
+        primary = self._theme.color("primary")
+        text = self._theme.color("text_primary")
+        for btn, name in self._icon_buttons:
+            btn.setIcon(build_icon(name, primary if btn in (self._preview_btn, self._apply_btn) else text))
 
     # ----------------------------- 工作区与表 -----------------------------
 
