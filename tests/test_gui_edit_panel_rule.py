@@ -46,7 +46,8 @@ def test_rule_bar_toggle_and_apply(panel: tuple[EditPanel, EditingController, Pa
     edit_panel._on_apply_rule()
     rule = controller.key_rule()
     assert rule is not None and rule[0] == "id" and rule[1] == 10  # max(10, 2+1)
-    assert "当前键列 id" in edit_panel._rule_hint.text()
+    # 应用成功后规则条自动收起（状态经 toast 提示）
+    assert edit_panel._rule_bar.isHidden()
     # 列头标识：模型 headerData 追加「·键」
     assert edit_panel._edit.edit_model().headerData(0, Qt.Horizontal) == "id ·键"
     # 追加行自动填键序号 10

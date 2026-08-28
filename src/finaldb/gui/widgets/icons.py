@@ -49,6 +49,7 @@ _ASSET_FILES = {
     "cancel": "cancel.svg",
     "new": "new.svg",
     "check": "check.svg",
+    "number": "number.svg",
 }
 
 # SVG 单色化：把全部 fill 属性值替换为占位符（渲染前换主题色）

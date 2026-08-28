@@ -232,6 +232,9 @@ class EditPanel(QWidget):
             (self._rename_col_btn, "edit"),
             (self._drop_col_btn, "del_col"),
             (self._clear_btn, "clear_table"),
+            (self._key_rule_btn, "number"),
+            (self._wash_btn, "wash_data"),
+            (self._merge_btn, "merge_data"),
         ]
         self._apply_icons()
         self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
@@ -293,12 +296,16 @@ class EditPanel(QWidget):
         self._rule_combo.blockSignals(False)
 
     def _on_apply_rule(self) -> None:
-        """应用键规则（键列 + 起始序号）。."""
+        """应用键规则（键列 + 起始序号），收起规则条并提示。."""
         column = self._rule_combo.currentText()
         if not column:
             self._toast.show_message("请选择键列")
             return
         self._edit.set_key_rule(column, self._rule_start.value())
+        rule = self._edit.key_rule()
+        next_num = rule[1] if rule is not None else ""
+        self._rule_bar.setVisible(False)
+        self._toast.show_message(f"键规则已应用：{column}，下一序号 {next_num}")
 
     def _on_key_rule_changed(self) -> None:
         """键规则变化：同步列头标识与规则条状态。."""
