@@ -8,7 +8,16 @@ from pathlib import Path
 
 import pytest
 
-from finaldb.core.stats import ColumnStat, WorkspaceOverview, column_stats, format_size, workspace_overview
+from finaldb.core.stats import (
+    ColumnStat,
+    TopNullColumn,
+    WorkspaceOverview,
+    column_stats,
+    format_size,
+    top_null_columns,
+    type_distribution,
+    workspace_overview,
+)
 
 
 @pytest.fixture()
@@ -93,3 +102,25 @@ def test_format_size() -> None:
     assert format_size(1024 * 1024) == "1.0 MB"
     assert format_size(1024**3) == "1.0 GB"
     assert format_size(1024**4) == "1.0 TB"
+
+
+def test_type_distribution(db: tuple[sqlite3.Connection, Path]) -> None:
+    """类型分布：按列数降序排列。."""
+    conn, _path = db
+    conn.execute('CREATE TABLE "u" ("a" TEXT, "b" TEXT, "c" INTEGER)')
+    conn.commit()
+    assert type_distribution(conn) == [("TEXT", 3), ("INTEGER", 2)]
+
+
+def test_top_null_columns(db: tuple[sqlite3.Connection, Path]) -> None:
+    """空值 TOP：按空值数降序取前 N，无空值列不进入榜单。."""
+    conn, _path = db
+    conn.execute('CREATE TABLE "u" ("x" TEXT, "y" TEXT)')
+    conn.executemany('INSERT INTO "u" VALUES (?, ?)', [(None, "a"), (None, None), ("z", "b")])
+    conn.commit()
+    result = top_null_columns(conn)
+    # u.x 2 个空值 > t.name/t.age/u.y 各 1 个
+    assert result[0] == TopNullColumn(table="u", column="x", null_count=2, total=3)
+    assert all(item.null_count == 1 for item in result[1:])
+    assert len(result) == 4  # t.name/t.age/u.x/u.y
+    assert top_null_columns(conn, limit=2) == result[:2]

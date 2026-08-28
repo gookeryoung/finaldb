@@ -421,6 +421,13 @@ QStatusBar {{
 QStatusBar::item {{ border: none; }}
 QLabel#statusSaved {{ color: {c["text_secondary"]}; font-size: {caption}px; padding: 0 4px; }}
 
+/* ========== 统计页指标卡 ========== */
+QLabel#metricValue {{
+    color: {c["text_primary"]};
+    font-size: {theme.font_size_heading() + 4}px;
+    font-weight: 600;
+}}
+
 /* ========== 文本域 ========== */
 QTextEdit, QPlainTextEdit {{
     background-color: {c["bg_card"]};

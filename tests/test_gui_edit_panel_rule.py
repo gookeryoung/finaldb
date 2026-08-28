@@ -92,6 +92,6 @@ def test_status_bar_shows_saved(main_window: tuple[Any, ...]) -> None:
     edit_ctrl.load_tables(str(demo))
     edit_ctrl.open_table("t")
     edit_ctrl.add_row()
-    label = window.findChild(type(window._saved_label), "statusSaved")
+    label = window.findChild(type(window._saved_text), "statusSaved")
     assert label is not None
     assert label.text().startswith("已保存 ")

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from PySide2.QtCore import Qt
+from PySide2.QtCore import Qt, Signal
 from PySide2.QtGui import QShowEvent
 from PySide2.QtWidgets import (
     QButtonGroup,
@@ -50,6 +50,9 @@ _HOW_VALUES = ["inner", "left"]
 class MergePane(QWidget):
     """合并去重面板：两栏布局（模式配置 | 模式说明）。."""
 
+    # 请求返回编辑面板（数据页面板栈）
+    back_requested = Signal()
+
     def __init__(
         self,
         theme: ThemeManager,
@@ -85,9 +88,13 @@ class MergePane(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(SPACING_SM)
 
-        # ---------- 顶部工具栏：模式切换 + 执行 ----------
+        # ---------- 顶部工具栏：返回 + 模式切换 + 执行 ----------
         bar = QHBoxLayout()
         bar.setSpacing(SPACING_SM)
+        back_btn = QPushButton("返回编辑")
+        back_btn.setProperty("variant", "secondary")
+        back_btn.clicked.connect(self._emit_back)
+        bar.addWidget(back_btn)
         self._mode_group = QButtonGroup(self)
         self._mode_group.setExclusive(True)
         for index, title in enumerate(_MODE_TITLES):
@@ -256,6 +263,10 @@ class MergePane(QWidget):
         return pane
 
     # ----------------------------- 状态与刷新 -----------------------------
+
+    def _emit_back(self) -> None:
+        """发射返回编辑请求（数据页切回编辑面板）。."""
+        self.back_requested.emit()  # pyrefly: ignore [missing-attribute]
 
     def showEvent(self, event: QShowEvent) -> None:
         """面板可见时重载表列表。."""

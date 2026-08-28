@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from PySide2.QtCore import Qt, Signal
-from PySide2.QtWidgets import QButtonGroup, QCheckBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide2.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from finaldb.gui.theme import SIDEBAR_WIDTH, SPACING_SM, ThemeManager
 from finaldb.gui.widgets.icons import build_icon
+from finaldb.gui.widgets.toggle_switch import ToggleSwitch
 
 __all__ = ["NavButton", "Sidebar"]
 
@@ -147,7 +148,7 @@ class Sidebar(QFrame):
         badge.setPixmap(build_icon("database", palette["text_on_primary"]).pixmap(18, 18))
 
     def _build_dark_row(self) -> QWidget:
-        """构建暗色模式切换行（moon/sun 图标随主题切换 + 复选框）。."""
+        """构建暗色模式切换行（moon/sun 图标 + 文本 + 滑动开关）。."""
         row = QFrame(self)
         row.setObjectName("darkRow")
         layout = QHBoxLayout(row)
@@ -156,17 +157,19 @@ class Sidebar(QFrame):
         icon = QLabel(row)
         icon.setFixedSize(16, 16)
         icon.setAlignment(Qt.AlignCenter)
-        check = QCheckBox("暗色模式", row)
-        check.setChecked(self._theme.is_dark())
-        check.toggled.connect(self._theme.set_dark)
+        label = QLabel("暗色模式", row)
+        self._dark_switch = ToggleSwitch(self._theme, row)
+        self._dark_switch.set_checked(self._theme.is_dark(), animate=False)
+        self._dark_switch.toggled.connect(self._theme.set_dark)  # pyrefly: ignore [missing-attribute]
         layout.addWidget(icon)
-        layout.addWidget(check, stretch=1)
+        layout.addWidget(label, stretch=1)
+        layout.addWidget(self._dark_switch)
         self._theme.theme_changed.connect(lambda: self._style_dark_row(row, icon))  # pyrefly: ignore [missing-attribute]
         self._style_dark_row(row, icon)
         return row
 
     def _style_dark_row(self, row: QFrame, icon: QLabel) -> None:
-        """按当前主题刷新暗色切换行样式与 moon/sun 图标。"""
+        """按当前主题刷新暗色切换行样式、moon/sun 图标与开关状态。"""
         palette = self._theme.palette()
         row.setStyleSheet(
             f"QFrame#darkRow {{ background-color: {palette['sidebar_hover'] if self._theme.is_dark() else palette['bg_app']};"
@@ -174,3 +177,5 @@ class Sidebar(QFrame):
         )
         name = "moon" if self._theme.is_dark() else "sun"
         icon.setPixmap(build_icon(name, palette["text_secondary"]).pixmap(16, 16))
+        # 主题可能从设置页等其他入口切换，同步开关状态（不触发 toggled）
+        self._dark_switch.set_checked(self._theme.is_dark(), animate=False)

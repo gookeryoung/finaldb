@@ -20,9 +20,12 @@ from finaldb.core.storage.database import (
 
 __all__ = [
     "ColumnStat",
+    "TopNullColumn",
     "WorkspaceOverview",
     "column_stats",
     "format_size",
+    "top_null_columns",
+    "type_distribution",
     "workspace_overview",
 ]
 
@@ -70,6 +73,65 @@ class WorkspaceOverview:
     total_rows: int
     total_columns: int
     db_bytes: int
+
+
+@dataclass(frozen=True)
+class TopNullColumn:
+    """空值最多的列（跨表画像，数据质量定位）。
+
+    :ivar table: 表名
+    :ivar column: 列名
+    :ivar null_count: 空值数
+    :ivar total: 表总行数
+    """
+
+    table: str
+    column: str
+    null_count: int
+    total: int
+
+
+def type_distribution(conn: sqlite3.Connection) -> list[tuple[str, int]]:
+    """统计全库列类型分布（按列数降序）。
+
+    :param conn: 数据库连接
+    :return: (类型名, 列数) 列表
+    """
+    counts: dict[str, int] = {}
+    for info in table_infos(conn):
+        for column in info.columns:
+            counts[column.sql_type] = counts.get(column.sql_type, 0) + 1
+    return sorted(counts.items(), key=_type_count_desc)
+
+
+def _type_count_desc(item: tuple[str, int]) -> tuple[int, str]:
+    """类型分布排序键：列数降序、类型名升序。."""
+    return (-item[1], item[0])
+
+
+def top_null_columns(conn: sqlite3.Connection, limit: int = 5) -> list[TopNullColumn]:
+    """找全库空值最多的列（数据质量画像，按空值数降序取前 N）。
+
+    :param conn: 数据库连接
+    :param limit: 返回条数上限
+    :return: TopNullColumn 列表（无数据返回空列表）
+    """
+    result: list[TopNullColumn] = []
+    for info in table_infos(conn):
+        tbl = quote_identifier(info.name)
+        for column in info.columns:
+            col = quote_identifier(column.name)
+            non_null = conn.execute(f"SELECT COUNT({col}) FROM {tbl}").fetchone()[0]
+            null_count = info.row_count - int(non_null)
+            if null_count > 0:
+                result.append(TopNullColumn(info.name, column.name, null_count, info.row_count))
+    result.sort(key=_null_count_desc)
+    return result[:limit]
+
+
+def _null_count_desc(item: TopNullColumn) -> tuple[int, str, str]:
+    """空值 TOP 排序键：空值数降序、表名/列名升序。."""
+    return (-item.null_count, item.table, item.column)
 
 
 def workspace_overview(conn: sqlite3.Connection, db_path: Path) -> WorkspaceOverview:

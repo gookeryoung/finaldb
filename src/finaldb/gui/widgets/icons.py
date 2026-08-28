@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from PySide2.QtCore import QByteArray, QRectF, QSize, Qt
-from PySide2.QtGui import QIcon, QPainter, QPixmap
+from PySide2.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide2.QtSvg import QSvgRenderer
 
 __all__ = ["ICON_NAMES", "build_icon", "icon_size"]
@@ -48,6 +48,7 @@ _ASSET_FILES = {
     "merge_data": "merge_data.svg",
     "cancel": "cancel.svg",
     "new": "new.svg",
+    "check": "check.svg",
 }
 
 # SVG 单色化：把全部 fill 属性值替换为占位符（渲染前换主题色）
@@ -82,26 +83,24 @@ def _asset_svg(filename: str) -> str:
 def build_icon(name: str, color: str) -> QIcon:
     """按名称与颜色渲染单色 SVG 资产图标。
 
+    未知名称、资产缺失或渲染失败时返回黑色方块占位图标
+    （提示资产缺失，不中断界面）。
+
     Args:
-        name: 图标名（须在 ``ICON_NAMES`` 内）
+        name: 图标名（应在 ``ICON_NAMES`` 内）
         color: 十六进制色值（须与所在按钮的文字色一致）
 
     Returns:
         24x24 逻辑尺寸（2x 物理像素）的 QIcon
-
-    Raises:
-        ValueError: 图标名不存在或资产文件缺失时
     """
     filename = _ASSET_FILES.get(name)
-    if filename is None:
-        raise ValueError(f"未知图标名称: {name}")
-    svg_text = _asset_svg(filename)
+    svg_text = _asset_svg(filename) if filename is not None else ""
     if not svg_text:
-        raise ValueError(f"图标资产缺失: {name} ({filename})")
+        return _block_icon()
     data = QByteArray(svg_text.replace(_FILL_TOKEN, color).encode("utf-8"))
     renderer = QSvgRenderer(data)
     if not renderer.isValid():
-        raise ValueError(f"图标资产无法渲染: {name} ({filename})")
+        return _block_icon()
     # 2x 物理像素渲染，保证高 DPI 下边缘锐利
     pixmap = QPixmap(_GRID * 2, _GRID * 2)
     pixmap.setDevicePixelRatio(2.0)
@@ -109,6 +108,20 @@ def build_icon(name: str, color: str) -> QIcon:
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
     renderer.render(painter, QRectF(0, 0, _GRID, _GRID))
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _block_icon() -> QIcon:
+    """黑色方块占位图标（资产缺失提示）。."""
+    pixmap = QPixmap(_GRID * 2, _GRID * 2)
+    pixmap.setDevicePixelRatio(2.0)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor("#000000"))
+    painter.drawRoundedRect(QRectF(5, 5, _GRID - 10, _GRID - 10), 3, 3)
     painter.end()
     return QIcon(pixmap)
 

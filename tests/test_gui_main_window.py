@@ -59,8 +59,8 @@ def test_toggle_sidebar(main_window: WindowFixture, qapp: Any) -> None:
 
 
 def test_sidebar_dark_toggle_switches_theme(main_window: WindowFixture, qapp: Any) -> None:
-    """侧边栏暗色开关切换主题并联动导航图标颜色。."""
-    from PySide2.QtWidgets import QCheckBox, QFrame, QLabel
+    """侧边栏滑动开关切换主题并联动导航图标颜色。."""
+    from PySide2.QtWidgets import QFrame, QLabel
 
     def _icon_rgb(label: QLabel) -> set[int]:
         """提取导航图标 pixmap 的非透明像素 RGB 值集合。."""
@@ -71,15 +71,32 @@ def test_sidebar_dark_toggle_switches_theme(main_window: WindowFixture, qapp: An
 
     window, theme, *_rest = main_window
     assert window.sidebar.findChild(QFrame, "darkRow") is not None
-    check = window.sidebar.findChild(QCheckBox)
-    assert check is not None
-    # 勾选侧边栏开关 → 主题切暗色 → 导航图标随主题换色（#7AA2F7）
-    check.setChecked(True)
+    switch = window.sidebar._dark_switch
+    assert switch.is_checked() is False
+    # 打开滑动开关 → 主题切暗色 → 导航图标随主题换色（#7AA2F7）
+    switch.set_checked(True, animate=False)
+    switch.toggled.emit(True)
     qapp.processEvents()
     assert theme.is_dark() is True
     badge = window.sidebar._buttons["data"]._badge
     assert 0x7AA2F7 in _icon_rgb(badge)
-    check.setChecked(False)
+    switch.set_checked(False, animate=False)
+    switch.toggled.emit(False)
     assert theme.is_dark() is False
     # 浅色主题选中态主色 #0366D6
     assert 0x0366D6 in _icon_rgb(badge)
+
+
+def test_status_bar_saved_icon_and_text(main_window: WindowFixture) -> None:
+    """状态栏：绿色勾图标随保存状态刷新。."""
+    window, *_rest = main_window
+    assert window._saved_text.text() == "就绪"
+    assert not window._saved_icon.pixmap().isNull()
+    window._on_saved("已保存 12:00:00")
+    assert window._saved_text.text() == "已保存 12:00:00"
+    # 勾图标非空且非黑色方块（成功色着色）
+    img = window._saved_icon.pixmap().toImage()
+    colors = {
+        img.pixel(x, y) & 0xFFFFFF for x in range(img.width()) for y in range(img.height()) if img.pixel(x, y) != 0
+    }
+    assert 0x28A745 in colors  # success 绿

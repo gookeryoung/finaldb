@@ -15,6 +15,7 @@ from PySide2.QtWidgets import (
 from finaldb.app_controllers import Controllers
 from finaldb.gui.controllers.editing_controller import EditingController
 from finaldb.gui.theme import ThemeManager
+from finaldb.gui.widgets.icons import build_icon
 from finaldb.gui.widgets.pages.about_page import AboutPage
 from finaldb.gui.widgets.pages.data_page import DataPage
 from finaldb.gui.widgets.pages.settings_page import SettingsPage
@@ -72,13 +73,18 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central)
 
-        # ---------- 状态栏：保存状态（编辑即时落库，每次操作后更新） ----------
-        self._saved_label = QLabel("就绪")
-        self._saved_label.setObjectName("statusSaved")
-        self.statusBar().addWidget(self._saved_label)
+        # ---------- 状态栏：保存状态（绿色勾图标 + 时间，编辑即时落库） ----------
+        self._saved_icon = QLabel()
+        self._saved_icon.setFixedWidth(18)
+        self._saved_text = QLabel("就绪")
+        self._saved_text.setObjectName("statusSaved")
+        self.statusBar().addWidget(self._saved_icon)
+        self.statusBar().addWidget(self._saved_text)
+        self._refresh_saved_icon()
         editing = controllers["editing"]
         if isinstance(editing, EditingController):
-            editing.saved.connect(self._saved_label.setText)  # pyrefly: ignore [missing-attribute]
+            editing.saved.connect(self._on_saved)  # pyrefly: ignore [missing-attribute]
+        self._theme.theme_changed.connect(self._refresh_saved_icon)  # pyrefly: ignore [missing-attribute]
 
         self.sidebar.page_requested.connect(self.set_current_page)  # pyrefly: ignore [missing-attribute]
         self.stack.currentChanged.connect(self._on_stack_changed)
@@ -103,6 +109,16 @@ class MainWindow(QMainWindow):
         self.sidebar.setVisible(not self.sidebar.isVisible())
 
     # ----------------------------- 内部 -----------------------------
+
+    def _on_saved(self, text: str) -> None:
+        """编辑落库后刷新状态栏文本与绿色勾图标。."""
+        self._saved_text.setText(text)
+        self._refresh_saved_icon()
+
+    def _refresh_saved_icon(self) -> None:
+        """按当前主题重建绿色勾图标（成功色，16px）。."""
+        pixmap = build_icon("check", self._theme.color("success")).pixmap(16, 16)
+        self._saved_icon.setPixmap(pixmap)
 
     def _on_stack_changed(self, index: int) -> None:
         """页面栈切换后同步侧边栏选中态。."""

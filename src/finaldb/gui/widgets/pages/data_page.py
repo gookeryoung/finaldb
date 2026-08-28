@@ -1,7 +1,7 @@
-"""数据页：工作区/表选择面板 + 数据操作三模式（编辑/清洗/合并去重）。
+"""数据页：工作区/表选择面板 + 编辑主面板（清洗/合并为编辑内子功能）。
 
-左侧单面板承载工作区下拉与表列表（替代原双卡片），右侧按模式按钮切换
-编辑面板、清洗面板与合并去重面板——数据操作整合在同一入口下。
+左侧单面板承载工作区下拉与表列表，右侧为编辑面板栈——编辑为
+默认态，数据清洗与合并去重经编辑工具栏入口进入、可一键返回。
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ from __future__ import annotations
 from PySide2.QtCore import Qt
 from PySide2.QtGui import QShowEvent
 from PySide2.QtWidgets import (
-    QButtonGroup,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
@@ -41,14 +40,9 @@ __all__ = ["DataPage"]
 # 导入文件选择器的名称过滤器
 _IMPORT_FILTER = "数据文件 (*.csv *.tsv *.xlsx *.xlsm *.json *.ndjson);;所有文件 (*)"
 
-# 数据操作模式标题（与右侧面板栈顺序一致）
-_MODE_TITLES = ("编辑", "数据清洗", "合并去重")
-# 模式图标名（与 _MODE_TITLES 一一对应，均来自用户资产）
-_MODE_ICONS = ("edit", "wash_data", "merge_data")
-
 
 class DataPage(QWidget):
-    """数据页：左（工作区下拉 + 表列表）| 右（模式按钮 + 操作面板栈）。."""
+    """数据页：左（工作区下拉 + 表列表）| 右（编辑面板 + 清洗/合并子面板）。."""
 
     def __init__(
         self,
@@ -131,27 +125,9 @@ class DataPage(QWidget):
         left_layout.addWidget(self._table_empty)
         body.addWidget(left)
 
-        # 右：模式按钮 + 操作面板栈
+        # 右：编辑主面板 + 清洗/合并子面板（编辑工具栏入口切换，点表回编辑）
         right = QVBoxLayout()
         right.setSpacing(SPACING_SM)
-
-        mode_row = QHBoxLayout()
-        mode_row.setSpacing(SPACING_SM)
-        self._mode_group = QButtonGroup(self)
-        self._mode_group.setExclusive(True)
-        self._mode_buttons: list[QPushButton] = []
-        for index, title in enumerate(_MODE_TITLES):
-            mode_btn = QPushButton(title)
-            mode_btn.setProperty("modeButton", True)
-            mode_btn.setCheckable(True)
-            mode_btn.setChecked(index == 0)
-            mode_btn.setCursor(Qt.PointingHandCursor)
-            self._mode_group.addButton(mode_btn, index)
-            mode_btn.clicked.connect(lambda _=False, idx=index: self._stack.setCurrentIndex(idx))
-            mode_row.addWidget(mode_btn)
-            self._mode_buttons.append(mode_btn)
-        mode_row.addStretch(1)
-        right.addLayout(mode_row)
 
         self._stack = QStackedWidget()
         self._editor = EditPanel(theme, editing_ctrl)
@@ -160,6 +136,10 @@ class DataPage(QWidget):
         self._stack.addWidget(self._editor)
         self._stack.addWidget(self._clean_pane)
         self._stack.addWidget(self._merge_pane)
+        # 编辑工具栏「数据清洗/合并去重」入口切换子面板；子面板返回编辑
+        self._editor.pane_requested.connect(self._stack.setCurrentIndex)  # pyrefly: ignore [missing-attribute]
+        self._clean_pane.back_requested.connect(lambda: self._stack.setCurrentIndex(0))  # pyrefly: ignore [missing-attribute]
+        self._merge_pane.back_requested.connect(lambda: self._stack.setCurrentIndex(0))  # pyrefly: ignore [missing-attribute]
         right.addWidget(self._stack, stretch=1)
         body.addLayout(right, stretch=1)
 
@@ -184,29 +164,20 @@ class DataPage(QWidget):
         self._icon_buttons: list[tuple[QPushButton, str, str]] = [
             (self._new_btn, "new", "primary"),
             (self._import_btn, "import_data", "primary"),
-            (self._ws_delete_btn, "question", "danger"),
+            (self._ws_delete_btn, "cancel", "danger"),
         ]
-        # 模式按钮随主题换色（选中主色底前景 / 未选中正文色）；
-        # 选中态切换同样重绘（图标色随状态）
-        for index, mode_btn in enumerate(self._mode_buttons):
-            self._icon_buttons.append((mode_btn, _MODE_ICONS[index], "mode"))
-            mode_btn.toggled.connect(self._apply_icons)
         self._apply_icons()
         self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
 
     def _apply_icons(self) -> None:
-        """按当前主题为工具栏与模式按钮重建图标。
+        """按当前主题为工具栏按钮重建图标。
 
         颜色与按钮分级一致：primary 取主色底上的前景色、
-        danger 取危险色、mode 按选中态取主色底前景或正文色；
-        主题切换时整体重绘。
+        danger 取危险色；主题切换时整体重绘。
         """
         for btn, name, level in self._icon_buttons:
             if level == "danger":
                 color = self._theme.color("danger")
-            elif level == "mode":
-                on_primary = btn.isChecked()
-                color = self._theme.color("text_on_primary") if on_primary else self._theme.color("text_primary")
             else:
                 color = self._theme.color("text_on_primary")
             btn.setIcon(build_icon(name, color))
@@ -301,10 +272,9 @@ class DataPage(QWidget):
         self._table_empty.setVisible(not has_tables)
 
     def _on_table_clicked(self, item: QListWidgetItem) -> None:
-        """点击表项：切到编辑模式并打开该表。."""
+        """点击表项：切回编辑面板并打开该表。."""
         name = str(item.data(Qt.UserRole) or "")
         if name:
-            self._mode_group.button(0).setChecked(True)
             self._stack.setCurrentIndex(0)
             self._editor.open_table(name)
 

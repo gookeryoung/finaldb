@@ -20,21 +20,26 @@ def test_all_icons_non_null(qapp: Any) -> None:
         assert not icon.pixmap(24, 24).isNull()
 
 
-def test_unknown_icon_raises(qapp: Any) -> None:
-    """未注册图标名：抛 ValueError 且提示含原名。."""
-    with pytest.raises(ValueError, match="未知图标名称: nope"):
-        build_icon("nope", "#000000")
+def test_unknown_icon_returns_block(qapp: Any) -> None:
+    """未注册图标名：返回黑色方块占位（不抛异常）。."""
+    icon = build_icon("nope", "#000000")
+    assert not icon.isNull()
+    # 黑方块中心像素为黑色（占位提示）
+    img = icon.pixmap(24, 24).toImage()
+    assert img.pixel(12, 12) == 0xFF000000
 
 
-def test_asset_missing_raises(qapp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    """SVG 资产文件缺失时抛 ValueError（不再有自绘回退）。."""
+def test_asset_missing_returns_block(qapp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """SVG 资产文件缺失时返回黑色方块占位（不抛异常）。."""
 
     def _no_asset(_filename: str) -> str:
         return ""
 
     monkeypatch.setattr(icons_mod, "_asset_svg", _no_asset)
-    with pytest.raises(ValueError, match="图标资产缺失: undo"):
-        build_icon("undo", "#0366D6")
+    icon = build_icon("undo", "#0366D6")
+    assert not icon.isNull()
+    img = icon.pixmap(24, 24).toImage()
+    assert img.pixel(12, 12) == 0xFF000000
 
 
 def test_icon_color_changes_pixmap(qapp: Any) -> None:

@@ -67,6 +67,9 @@ class _RuleRow(QWidget):
 class CleanPane(QWidget):
     """数据清洗面板：两栏布局（规则配置 | 预览与统计）。."""
 
+    # 请求返回编辑面板（数据页面板栈）
+    back_requested = Signal()
+
     def __init__(
         self,
         theme: ThemeManager,
@@ -97,6 +100,10 @@ class CleanPane(QWidget):
         # ---------- 顶部工具栏 ----------
         bar = QHBoxLayout()
         bar.setSpacing(SPACING_SM)
+        back_btn = QPushButton("返回编辑")
+        back_btn.setProperty("variant", "secondary")
+        back_btn.clicked.connect(self._emit_back)
+        bar.addWidget(back_btn)
         self._busy = busy_bar()
         bar.addWidget(self._busy)
         bar.addStretch(1)
@@ -264,6 +271,10 @@ class CleanPane(QWidget):
         self._reload_combo(self._column_combo, [])
         self._update_preview_state()
         self._update_actions()
+
+    def _emit_back(self) -> None:
+        """发射返回编辑请求（数据页切回编辑面板）。."""
+        self.back_requested.emit()  # pyrefly: ignore [missing-attribute]
 
     def showEvent(self, event: QShowEvent) -> None:
         """面板可见时重载表列表。."""

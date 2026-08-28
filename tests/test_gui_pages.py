@@ -46,8 +46,8 @@ def test_data_workspace_and_table_flow(main_window: WindowFixture, tmp_path: Pat
     assert data._ws_combo.currentText() == "data-bind"
     assert data._table_list.count() == 1
     assert data._table_list.item(0).text() == "d (2)"
-    # 点击表项在右侧编辑面板打开编辑会话并切到编辑模式
-    data._mode_group.button(1).setChecked(True)
+    # 点击表项在右侧编辑面板打开编辑会话并切回编辑面板
+    data._stack.setCurrentIndex(1)
     data._on_table_clicked(data._table_list.item(0))
     qapp.processEvents()
     assert edit.current_table() == "d"
@@ -57,18 +57,26 @@ def test_data_workspace_and_table_flow(main_window: WindowFixture, tmp_path: Pat
     window.close()
 
 
-def test_data_mode_switch(main_window: WindowFixture, qapp: Any) -> None:
-    """数据页模式按钮组切换编辑/清洗/合并去重三个面板。."""
+def test_data_pane_switch_via_editor(main_window: WindowFixture, qapp: Any) -> None:
+    """数据页面板切换：编辑工具栏入口进清洗/合并，子面板返回编辑。."""
     window, *_rest = main_window
     data = _show(window, qapp, "data")
     assert data._stack.currentIndex() == 0
-    for index in (1, 2, 0):
-        data._mode_group.button(index).click()
-        qapp.processEvents()
-        assert data._stack.currentIndex() == index
-    # 三面板互斥选中
-    assert data._mode_group.button(0).isChecked()
-    assert not data._mode_group.button(1).isChecked()
+    # 编辑工具栏入口 → 清洗面板
+    data._editor._wash_btn.click()
+    qapp.processEvents()
+    assert data._stack.currentIndex() == 1
+    # 清洗面板返回编辑
+    data._clean_pane._emit_back()
+    qapp.processEvents()
+    assert data._stack.currentIndex() == 0
+    # 编辑工具栏入口 → 合并面板 → 返回
+    data._editor._merge_btn.click()
+    qapp.processEvents()
+    assert data._stack.currentIndex() == 2
+    data._merge_pane._emit_back()
+    qapp.processEvents()
+    assert data._stack.currentIndex() == 0
     window.close()
 
 
@@ -175,8 +183,8 @@ def test_clean_rule_flow(main_window: WindowFixture, tmp_path: Path, qapp: Any) 
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    # 切到清洗模式触发面板 showEvent 重载
-    data._mode_group.button(1).click()
+    # 经编辑工具栏入口切到清洗面板触发 showEvent 重载
+    data._editor._wash_btn.click()
     qapp.processEvents()
     assert clean._table_combo.count() == 1
     clean._on_table_activated(0)
@@ -269,8 +277,8 @@ def test_merge_three_modes_flow(main_window: WindowFixture, tmp_path: Path, qapp
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    # 切到合并模式触发面板 showEvent 重载
-    data._mode_group.button(2).click()
+    # 经编辑工具栏入口切到合并面板触发 showEvent 重载
+    data._editor._merge_btn.click()
     qapp.processEvents()
 
     # 模式 0：union 列表加载，单选不满足执行条件
@@ -336,13 +344,18 @@ def test_stats_page_summary_bars_and_columns(main_window: WindowFixture, tmp_pat
     ws.import_file_sync(str(csv))
     qapp.processEvents()
 
-    # showEvent 触发重载：摘要 + 条形图 + 表下拉
+    # showEvent 触发重载：摘要 + 指标卡 + 条形图 + 表下拉
     window.set_current_page("data")
     stats = _show(window, qapp, "stats")
-    assert stats._summary.text().startswith("共 1 张表")
-    assert "3 行" in stats._summary.text()
-    assert len(stats._bars) == 1
+    # 指标卡已覆盖原摘要信息：表数/行数/列数
+    assert len(stats._bars) == 1 + 1  # 行数分布 1 行 + 类型分布 1 类（TEXT）
     assert stats._table_combo.count() == 1
+    # 指标卡：表数/行数/列数
+    assert stats._metric_values[0].text() == "1"
+    assert stats._metric_values[1].text() == "3"
+    assert stats._metric_values[2].text() == "2"
+    # 空值 TOP：age 列 1 个空值（警示色条）
+    assert len(stats._null_bars) == 1
     # 未选表时列统计空态
     assert not stats._stat_view.isVisible()
     assert stats._stat_view.model().rowCount() == 0

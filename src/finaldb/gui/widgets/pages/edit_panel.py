@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from PySide2.QtCore import QSize, Qt
+from PySide2.QtCore import QSize, Qt, Signal
 from PySide2.QtGui import QKeySequence
 from PySide2.QtWidgets import (
     QApplication,
@@ -62,6 +62,9 @@ def _tool_separator() -> QFrame:
 
 class EditPanel(QWidget):
     """数据编辑面板：工具栏（撤销/行列操作）+ 编辑表格 + 分页条。."""
+
+    # 请求切换到数据页右侧面板栈的其他子面板（1=清洗 2=合并）
+    pane_requested = Signal(int)
 
     def __init__(
         self,
@@ -129,6 +132,20 @@ class EditPanel(QWidget):
         self._key_rule_btn.setToolTip("定义自增键列：追加行时自动生成键序号")
         self._key_rule_btn.clicked.connect(self._toggle_rule_bar)
         tools.addWidget(self._key_rule_btn)
+
+        tools.addWidget(_tool_separator())
+
+        # 数据清洗 / 合并去重：编辑下的次级功能入口（切换右侧面板）
+        self._wash_btn = QPushButton("数据清洗")
+        self._wash_btn.setProperty("variant", "secondary")
+        self._wash_btn.setToolTip("规则化清洗当前工作区数据")
+        self._wash_btn.clicked.connect(self._show_wash)
+        self._merge_btn = QPushButton("合并去重")
+        self._merge_btn.setProperty("variant", "secondary")
+        self._merge_btn.setToolTip("多表合并 / 去重 / 关联")
+        self._merge_btn.clicked.connect(self._show_merge)
+        tools.addWidget(self._wash_btn)
+        tools.addWidget(self._merge_btn)
         tools.addStretch(1)
         root.addLayout(tools)
 
@@ -242,6 +259,14 @@ class EditPanel(QWidget):
         self._edit.load_tables(workspace_path)
 
     # ----------------------------- 行操作 -----------------------------
+
+    def _show_wash(self) -> None:
+        """请求切换到数据清洗面板。."""
+        self.pane_requested.emit(1)  # pyrefly: ignore [missing-attribute]
+
+    def _show_merge(self) -> None:
+        """请求切换到合并去重面板。."""
+        self.pane_requested.emit(2)  # pyrefly: ignore [missing-attribute]
 
     def _toggle_rule_bar(self) -> None:
         """切换键规则内联条可见性（无表时提示）。."""
