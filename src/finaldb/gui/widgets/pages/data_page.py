@@ -43,6 +43,8 @@ _IMPORT_FILTER = "数据文件 (*.csv *.tsv *.xlsx *.xlsm *.json *.ndjson);;所�
 
 # 数据操作模式标题（与右侧面板栈顺序一致）
 _MODE_TITLES = ("编辑", "数据清洗", "合并去重")
+# 模式图标名（与 _MODE_TITLES 一一对应，均来自用户资产）
+_MODE_ICONS = ("edit", "wash_data", "merge_data")
 
 
 class DataPage(QWidget):
@@ -137,6 +139,7 @@ class DataPage(QWidget):
         mode_row.setSpacing(SPACING_SM)
         self._mode_group = QButtonGroup(self)
         self._mode_group.setExclusive(True)
+        self._mode_buttons: list[QPushButton] = []
         for index, title in enumerate(_MODE_TITLES):
             mode_btn = QPushButton(title)
             mode_btn.setProperty("modeButton", True)
@@ -146,6 +149,7 @@ class DataPage(QWidget):
             self._mode_group.addButton(mode_btn, index)
             mode_btn.clicked.connect(lambda _=False, idx=index: self._stack.setCurrentIndex(idx))
             mode_row.addWidget(mode_btn)
+            self._mode_buttons.append(mode_btn)
         mode_row.addStretch(1)
         right.addLayout(mode_row)
 
@@ -178,22 +182,30 @@ class DataPage(QWidget):
 
         # ---------- 图标装配（随主题重建） ----------
         self._icon_buttons: list[tuple[QPushButton, str, str]] = [
-            (self._new_btn, "add", "primary"),
             (self._import_btn, "import_data", "primary"),
             (self._ws_delete_btn, "question", "danger"),
         ]
+        # 模式按钮随主题换色（选中主色底前景 / 未选中正文色）；
+        # 选中态切换同样重绘（图标色随状态）
+        for index, mode_btn in enumerate(self._mode_buttons):
+            self._icon_buttons.append((mode_btn, _MODE_ICONS[index], "mode"))
+            mode_btn.toggled.connect(self._apply_icons)
         self._apply_icons()
         self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
 
     def _apply_icons(self) -> None:
-        """按当前主题为工具栏按钮重建图标。
+        """按当前主题为工具栏与模式按钮重建图标。
 
         颜色与按钮分级一致：primary 取主色底上的前景色、
-        danger 取危险色；主题切换时整体重绘。
+        danger 取危险色、mode 按选中态取主色底前景或正文色；
+        主题切换时整体重绘。
         """
         for btn, name, level in self._icon_buttons:
             if level == "danger":
                 color = self._theme.color("danger")
+            elif level == "mode":
+                on_primary = btn.isChecked()
+                color = self._theme.color("text_on_primary") if on_primary else self._theme.color("text_primary")
             else:
                 color = self._theme.color("text_on_primary")
             btn.setIcon(build_icon(name, color))

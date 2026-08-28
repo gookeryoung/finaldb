@@ -238,22 +238,20 @@ class CleanPane(QWidget):
         self._on_kind_changed(self._kind_combo.currentIndex())
         self._on_workspace_changed()
 
-        # ---------- 图标装配（随主题重建） ----------
+        # ---------- 图标装配（随主题重建；应用/添加规则无对应资产，保持纯文字） ----------
         self._icon_buttons: list[tuple[QPushButton, str]] = [
             (self._preview_btn, "preview"),
-            (self._apply_btn, "apply"),
-            (add_btn, "add"),
-            (clear_btn, "delete"),
+            (clear_btn, "cancel"),
         ]
         self._apply_icons()
         self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
 
     def _apply_icons(self) -> None:
-        """按当前主题为工具按钮重建图标（预览/应用主色，其余正文色）。."""
+        """按当前主题为工具按钮重建图标（预览主色，清空规则正文色）。."""
         primary = self._theme.color("primary")
         text = self._theme.color("text_primary")
         for btn, name in self._icon_buttons:
-            btn.setIcon(build_icon(name, primary if btn in (self._preview_btn, self._apply_btn) else text))
+            btn.setIcon(build_icon(name, primary if btn is self._preview_btn else text))
 
     # ----------------------------- 工作区与表 -----------------------------
 

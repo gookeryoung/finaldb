@@ -26,7 +26,6 @@ from finaldb.gui.controllers.merge_controller import MergeController
 from finaldb.gui.controllers.workspace_controller import WorkspaceController
 from finaldb.gui.theme import SPACING_MD, SPACING_SM, ThemeManager
 from finaldb.gui.widgets.common import busy_bar, caption_label, card
-from finaldb.gui.widgets.icons import build_icon
 from finaldb.gui.widgets.toast import Toast
 
 __all__ = ["MergePane"]
@@ -161,14 +160,6 @@ class MergePane(QWidget):
         self._ws.current_changed.connect(self._on_workspace_changed)  # pyrefly: ignore [missing-attribute]
 
         self._update_actions()
-
-        # ---------- 图标装配（随主题重建） ----------
-        self._apply_icons()
-        self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
-
-    def _apply_icons(self) -> None:
-        """按当前主题为执行按钮重建图标（主操作取主色底前景色）。."""
-        self._apply_btn.setIcon(build_icon("apply", self._theme.color("text_on_primary")))
 
     # ----------------------------- 面板构建 -----------------------------
 

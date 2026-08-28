@@ -168,18 +168,17 @@ class EditPanel(QWidget):
         self._edit.table_loaded.connect(self._on_table_loaded)  # pyrefly: ignore [missing-attribute]
         self._edit.undo_changed.connect(self._update_actions)  # pyrefly: ignore [missing-attribute]
         self._edit.error_raised.connect(self._toast.show_error)  # pyrefly: ignore [missing-attribute]
-        # 工具栏/分页按钮 → 图标名映射（颜色按按钮分级随主题重建）
+        # 工具栏按钮 → 图标名映射（颜色按按钮分级随主题重建；
+        # 分页按钮无对应资产，保持纯文字）
         self._icon_buttons: list[tuple[QPushButton, str]] = [
             (self._undo_btn, "undo"),
             (self._redo_btn, "redo"),
             (self._add_row_btn, "add_row"),
             (self._del_row_btn, "del_row"),
             (self._add_col_btn, "add_col"),
-            (self._rename_col_btn, "rename_col"),
+            (self._rename_col_btn, "edit"),
             (self._drop_col_btn, "del_col"),
             (self._clear_btn, "clear_table"),
-            (self._prev_btn, "prev_page"),
-            (self._next_btn, "next_page"),
         ]
         self._apply_icons()
         self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
