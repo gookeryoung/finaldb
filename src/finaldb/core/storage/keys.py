@@ -53,11 +53,10 @@ def set_key_rule(conn: sqlite3.Connection, table: str, column: str, start: int) 
     :param start: 起始序号（用户定义规则的起点，作为后续生成的不回落下限）
     """
     ensure_cfg_table(conn)
-    nxt = max(start, _max_key_value(conn, table, column) + 1)
-    # INSERT OR REPLACE 兼容旧版 SQLite（ON CONFLICT 需 3.24+）
+    # 存用户起始值作为不回落下限；下一序号读取时按当前数据实时计算
     conn.execute(
         f'INSERT OR REPLACE INTO {CFG_TABLE} ("table", "column", "next") VALUES (?, ?, ?)',
-        (table, column, nxt),
+        (table, column, start),
     )
     conn.commit()
 

@@ -48,7 +48,7 @@ def test_next_key_follows_data(db: Path) -> None:
     assert next_key(conn, "t", "id") == 4  # 未落库前不推进
     conn.execute("DELETE FROM t WHERE id = 3")
     conn.commit()
-    assert next_key(conn, "t", "id") == 3  # 删除后回落复用 3
+    assert next_key(conn, "t", "id") == 2  # 删除后回落（剩余 id=1，下一为 2）
     conn.close()
 
 
