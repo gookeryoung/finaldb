@@ -40,15 +40,15 @@ def test_rule_roundtrip(db: Path) -> None:
     conn.close()
 
 
-def test_next_key_avoids_reuse(db: Path) -> None:
-    """删除最大键行后下一键不重号（存储计数器推进）。."""
+def test_next_key_follows_data(db: Path) -> None:
+    """下一键由数据驱动：删除最大键行后序号回落复用（双向绑定）。."""
     conn = connect(db)
     set_key_rule(conn, "t", "id", 1)
     assert next_key(conn, "t", "id") == 4
-    assert next_key(conn, "t", "id") == 5
+    assert next_key(conn, "t", "id") == 4  # 未落库前不推进
     conn.execute("DELETE FROM t WHERE id = 3")
     conn.commit()
-    assert next_key(conn, "t", "id") == 6  # 不回退复用 4
+    assert next_key(conn, "t", "id") == 3  # 删除后回落复用 3
     conn.close()
 
 
@@ -72,7 +72,7 @@ def test_meta_table_hidden(db: Path) -> None:
 
 
 def test_service_add_row_autofills_key(db: Path) -> None:
-    """服务层追加行自动生成键序号；撤销后计数不回退。."""
+    """服务层追加行自动生成键序号；撤销/删除后序号随数据回落。."""
     service = EditService(db)
     service.set_key_rule("t", "id", 1)
     rowid = service.add_row("t")
@@ -86,7 +86,26 @@ def test_service_add_row_autofills_key(db: Path) -> None:
     service.undo()
     service.add_row("t")
     _, rows3, _ = service.fetch_page("t", 0)
-    assert [row[1][0] for row in rows3] == [1, 3, 4, 6]  # 撤销后新行仍不复用 5
+    assert [row[1][0] for row in rows3] == [1, 3, 4, 5]  # 撤销删 5 后新行复用 5
+
+
+def test_service_delete_rows_then_reuse_key(db: Path) -> None:
+    """用户场景回归：定义键规则后新增三行再删除，下一序号回落复用。."""
+    service = EditService(db)
+    service.set_key_rule("t", "id", 1)
+    # 连续追加三行：键序号 4/5/6
+    rowids = [service.add_row("t") for _ in range(3)]
+    _, rows, _ = service.fetch_page("t", 0)
+    assert [row[1][0] for row in rows] == [1, 3, 4, 5, 6]
+    # 删除最后三行（键 4/5/6）
+    service.delete_rows("t", rowids)
+    _, rows2, _ = service.fetch_page("t", 0)
+    assert [row[1][0] for row in rows2] == [1, 3]
+    # 下一序号回落到 4，且规则查询（界面规则条同源）与实际生成一致
+    assert service.key_rule("t") == ("id", 4)
+    service.add_row("t")
+    _, rows3, _ = service.fetch_page("t", 0)
+    assert [row[1][0] for row in rows3] == [1, 3, 4]
 
 
 def test_service_set_rule_bad_column(db: Path) -> None:

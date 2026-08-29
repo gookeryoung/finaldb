@@ -1,9 +1,10 @@
 """自增键规则：元表持久化 + 下一键序号生成。
 
-规则按表存储于 ``_finaldb_keycfg`` 元表（列 + 起始值），元表在
+规则按表存储于 ``_finaldb_keycfg`` 元表（列 + 起始下限），元表在
 :func:`finaldb.core.storage.database.table_infos` 等清单入口统一隐藏。
-下一键取「已存最大数值 + 1」与「存储计数器」的较大者，避免删除
-最大键行后重号；每次生成后推进存储计数器。
+下一键完全由数据驱动：取「键列已存最大数值 + 1」与「定义规则时的
+起始下限」的较大者，实时计算——删除行后序号自动回落复用，与界面
+展示双向一致。
 """
 
 from __future__ import annotations
@@ -36,7 +37,11 @@ def get_key_rule(conn: sqlite3.Connection, table: str) -> tuple[str, int] | None
     """
     ensure_cfg_table(conn)
     row = conn.execute(f'SELECT "column", "next" FROM {CFG_TABLE} WHERE "table" = ?', (table,)).fetchone()
-    return (str(row[0]), int(row[1])) if row is not None else None
+    if row is None:
+        return None
+    column = str(row[0])
+    nxt = max(int(row[1]), _max_key_value(conn, table, column) + 1)
+    return (column, nxt)
 
 
 def set_key_rule(conn: sqlite3.Connection, table: str, column: str, start: int) -> None:
@@ -45,7 +50,7 @@ def set_key_rule(conn: sqlite3.Connection, table: str, column: str, start: int) 
     :param conn: 数据库连接
     :param table: 表名
     :param column: 键列名（须存在）
-    :param start: 起始序号（用户定义规则的起点）
+    :param start: 起始序号（用户定义规则的起点，作为后续生成的不回落下限）
     """
     ensure_cfg_table(conn)
     nxt = max(start, _max_key_value(conn, table, column) + 1)
@@ -65,7 +70,10 @@ def clear_key_rule(conn: sqlite3.Connection, table: str) -> None:
 
 
 def next_key(conn: sqlite3.Connection, table: str, column: str) -> int | None:
-    """生成并登记下一键序号（无规则返回 None，不推进计数器）。
+    """生成下一键序号（无规则返回 None）。
+
+    序号由数据实时驱动，无需登记推进：写入该序号的行落库后，
+    后续计算自然前移；删除行后自动回落复用被删的序号。
 
     :param conn: 数据库连接
     :param table: 表名
@@ -75,10 +83,7 @@ def next_key(conn: sqlite3.Connection, table: str, column: str) -> int | None:
     rule = get_key_rule(conn, table)
     if rule is None or rule[0] != column:
         return None
-    nxt = max(rule[1], _max_key_value(conn, table, column) + 1)
-    conn.execute(f'UPDATE {CFG_TABLE} SET "next" = ? WHERE "table" = ?', (nxt + 1, table))
-    conn.commit()
-    return nxt
+    return rule[1]
 
 
 def _max_key_value(conn: sqlite3.Connection, table: str, column: str) -> int:
