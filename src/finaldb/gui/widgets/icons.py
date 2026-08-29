@@ -50,6 +50,8 @@ _ASSET_FILES = {
     "new": "new.svg",
     "check": "check.svg",
     "number": "number.svg",
+    "page_up": "page_up.svg",
+    "page_down": "page_down.svg",
 }
 
 # SVG 单色化：把全部 fill 属性值替换为占位符（渲染前换主题色）

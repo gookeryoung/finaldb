@@ -221,8 +221,7 @@ class EditPanel(QWidget):
         self._edit.undo_changed.connect(self._update_actions)  # pyrefly: ignore [missing-attribute]
         self._edit.error_raised.connect(self._toast.show_error)  # pyrefly: ignore [missing-attribute]
         self._edit.key_rule_changed.connect(self._on_key_rule_changed)  # pyrefly: ignore [missing-attribute]
-        # 工具栏按钮 → 图标名映射（颜色按按钮分级随主题重建；
-        # 分页按钮无对应资产，保持纯文字）
+        # 工具栏按钮 → 图标名映射（颜色按按钮分级随主题重建）
         self._icon_buttons: list[tuple[QPushButton, str]] = [
             (self._undo_btn, "undo"),
             (self._redo_btn, "redo"),
@@ -235,6 +234,8 @@ class EditPanel(QWidget):
             (self._key_rule_btn, "number"),
             (self._wash_btn, "wash_data"),
             (self._merge_btn, "merge_data"),
+            (self._prev_btn, "page_up"),
+            (self._next_btn, "page_down"),
         ]
         self._apply_icons()
         self._theme.theme_changed.connect(self._apply_icons)  # pyrefly: ignore [missing-attribute]
